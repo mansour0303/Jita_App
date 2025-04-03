@@ -1,0 +1,2405 @@
+package com.example.jita
+
+import android.os.Bundle
+import android.util.Log
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.Checkbox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.example.jita.data.AppDatabase
+import com.example.jita.data.ListNameEntity
+import com.example.jita.data.TaskEntity
+import com.example.jita.ui.theme.JitaTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.text.DateFormatSymbols
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import kotlin.math.abs
+
+// Define navigation routes
+object AppDestinations {
+    const val MAIN_SCREEN = "main"
+    const val LISTS_SCREEN = "lists"
+    const val POMODORO_SCREEN = "pomodoro"
+}
+
+// Define custom colors
+val DarkBlue = Color(0xFF00008B) // Example Dark Blue
+val DarkRed = Color(0xFFB00020)  // Example Dark Red (similar to Material error)
+val LightBlue = Color(0xFFBEDCE8) // Example Light Blue
+
+// Extension function to move items within a SnapshotStateList
+fun <T> SnapshotStateList<T>.move(from: Int, to: Int) {
+    if (from == to) return
+    // Ensure indices are valid before proceeding
+    if (from < 0 || from >= size || to < 0 || to >= size) {
+         println("Warning: Invalid move indices (from: $from, to: $to, size: $size)")
+         return
+    }
+    val item = removeAt(from)
+    add(to, item)
+}
+
+// Add the extension function to convert Task to TaskEntity
+fun Task.toTaskEntity(): TaskEntity {
+    return TaskEntity(
+        id = this.id,
+        name = this.name,
+        description = this.description,
+        dueDate = this.dueDate.timeInMillis,
+        priority = this.priority.name,
+        list = this.list,
+        trackedTimeMillis = this.trackedTimeMillis,
+        isTracking = this.isTracking,
+        trackingStartTime = this.trackingStartTime,
+        completed = this.completed
+    )
+}
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        // Get database instance
+        val database = AppDatabase.getDatabase(applicationContext)
+        val listNameDao = database.listNameDao()
+        val taskDao = database.taskDao()
+
+        setContent {
+            // --- Coroutine Scope ---
+            val scope = rememberCoroutineScope() // Scope for launching db operations
+
+            // --- Hoisted State ---
+            // Observe list names from the database using Flow and collectAsState
+            // We store the Entity here to easily get the ID for updates/deletes
+            val listNameEntities by listNameDao.getAllListNames().collectAsState(initial = emptyList())
+            // Derive the simple list of names for UI components that need it
+            val listNames = remember(listNameEntities) {
+                listNameEntities.map { it.name }.toMutableStateList()
+            }
+
+            // Observe all tasks from the database
+            val allTasksFromDb by taskDao.getAllTasks().collectAsState(initial = emptyList())
+            // Convert TaskEntity to Task for the UI state
+            val tasks = remember(allTasksFromDb) {
+                allTasksFromDb.map { entity ->
+                    // Convert TaskEntity to Task
+                    val dueDateCalendar = Calendar.getInstance().apply { timeInMillis = entity.dueDate } // Convert Long to Calendar
+                    Task(
+                        id = entity.id,
+                        name = entity.name,
+                        description = entity.description,
+                        dueDate = dueDateCalendar, // Use the converted Calendar
+                        priority = try { // Safely convert String to Enum
+                            TaskPriority.valueOf(entity.priority)
+                        } catch (e: IllegalArgumentException) {
+                            Log.e("TaskMapping", "Invalid priority string found in DB: ${entity.priority}")
+                            TaskPriority.MEDIUM // Default fallback
+                        },
+                        list = entity.list,
+                        // Restore tracking state from DB
+                        isTracking = entity.isTracking,
+                        trackedTimeMillis = entity.trackedTimeMillis,
+                        trackingStartTime = entity.trackingStartTime,
+                        completed = entity.completed  // Add completed flag
+                    )
+                }.toMutableStateList()
+            }
+
+            // --- Callbacks for ListsScreen (Updated for Database) ---
+            val onAddList = { name: String ->
+                if (name.isNotBlank() && listNames.none { it.equals(name, ignoreCase = true) }) {
+                    scope.launch(Dispatchers.IO) { // Use IO dispatcher for DB operations
+                        listNameDao.insertListName(ListNameEntity(name = name))
+                    }
+                }
+            }
+            val onEditList = { index: Int, newName: String ->
+                 // Find the original entity based on the index (fragile if list order changes rapidly)
+                 // It's better to pass the original name or ID from the UI if possible
+                 if (newName.isNotBlank() && index >= 0 && index < listNameEntities.size) {
+                     val originalEntity = listNameEntities[index]
+                     if (listNames.none { it.equals(newName, ignoreCase = true) && it != originalEntity.name }) {
+                         scope.launch(Dispatchers.IO) {
+                             // Update the ListNameEntity
+                             listNameDao.updateListName(originalEntity.copy(name = newName))
+                             // Update associated tasks
+                             taskDao.updateTasksListName(originalEntity.name, newName)
+                         }
+                     }
+                 }
+            }
+            val onDeleteList = { index: Int ->
+                if (index >= 0 && index < listNameEntities.size) {
+                    val entityToDelete = listNameEntities[index]
+                    scope.launch(Dispatchers.IO) {
+                        listNameDao.deleteListNameByName(entityToDelete.name) // Delete by name
+                        // Also delete tasks associated with this list
+                        taskDao.deleteTasksByListName(entityToDelete.name)
+                    }
+                }
+            }
+            // Persisting drag-and-drop order requires storing an orderIndex in the DB
+            // and updating multiple rows in a transaction. For simplicity, this is omitted.
+            // The list will revert to alphabetical order on restart.
+            val onMoveList = { fromIndex: Int, toIndex: Int ->
+                 // This only affects the current UI state, not the persistent order
+                 listNames.move(fromIndex, toIndex)
+                 // To persist order:
+                 // 1. Add `orderIndex: Int` to ListNameEntity
+                 // 2. Query DAO with `ORDER BY orderIndex ASC`
+                 // 3. Implement a DAO method `updateListOrder(List<ListNameEntity>)`
+                 // 4. In that method, iterate through the reordered list and update `orderIndex`
+                 //    for each entity within a transaction.
+                 println("Warning: List move is temporary and not persisted.")
+            }
+            // --- End Callbacks ---
+
+            JitaTheme {
+                val navController = rememberNavController()
+                NavHost(
+                    navController = navController,
+                    startDestination = AppDestinations.MAIN_SCREEN
+                ) {
+                    composable(AppDestinations.MAIN_SCREEN) {
+                        MainScreen(
+                            navController = navController,
+                            listNames = listNames, // Pass derived list names
+                            tasks = tasks, // Pass tasks derived from DB
+                            onAddTask = { task -> // Add callback for adding tasks
+                                scope.launch(Dispatchers.IO) {
+                                    // Convert Task to TaskEntity before inserting
+                                    taskDao.insertTask(task.toTaskEntity())
+                                }
+                            },
+                            onDeleteTask = { task -> // Add callback for deleting tasks
+                                scope.launch(Dispatchers.IO) {
+                                     // Need the entity to delete by primary key
+                                     // Find the entity based on the UI Task's ID
+                                     val entityToDelete = allTasksFromDb.find { it.id == task.id }
+                                     entityToDelete?.let { taskDao.deleteTask(it) }
+                                }
+                            },
+                            onUpdateTask = { task -> // Add callback to update task
+                                scope.launch(Dispatchers.IO) {
+                                    // Convert Task to TaskEntity before updating
+                                    taskDao.updateTask(task.toTaskEntity()) // Ensure .toTaskEntity() is called here
+                                }
+                            }
+                        )
+                    }
+                    composable(AppDestinations.LISTS_SCREEN) {
+                        ListsScreen(
+                            navController = navController,
+                            listNames = listNames, // Pass derived list names
+                            tasks = tasks, // Add parameter to access tasks
+                            onAddList = onAddList,
+                            onEditList = onEditList,
+                            onDeleteList = onDeleteList,
+                            onMoveList = onMoveList
+                        )
+                    }
+                    composable(AppDestinations.POMODORO_SCREEN) { 
+                        PomodoroScreen(navController = navController)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Screen for Lists ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ListsScreen(
+    navController: NavHostController,
+    listNames: List<String>,
+    tasks: List<Task>, // Add parameter to access tasks
+    onAddList: (String) -> Unit,
+    onEditList: (Int, String) -> Unit,
+    onDeleteList: (Int) -> Unit,
+    onMoveList: (Int, Int) -> Unit // Still accept move for UI, but it's not persisted
+) {
+
+    // --- State for Dialogs (remains local to ListsScreen) ---
+    var showAddListDialog by remember { mutableStateOf(false) }
+    var newListName by rememberSaveable { mutableStateOf("") }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var listToDeleteIndex by remember { mutableStateOf<Int?>(null) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var listToEditIndex by remember { mutableStateOf<Int?>(null) }
+    var editedListName by rememberSaveable { mutableStateOf("") }
+
+    // --- State for Drag and Drop (remains local) ---
+    val lazyListState = rememberLazyListState()
+    var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var dragInitialOffset by remember { mutableStateOf(Offset.Zero) }
+    val itemHeights = remember { mutableStateMapOf<Int, Int>() }
+    var potentialTargetIndex by remember { mutableStateOf<Int?>(null) }
+    val density = LocalDensity.current
+
+    Scaffold(
+        containerColor = Color.White,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Lists",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {}, enabled = false) { /* Invisible */ }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    newListName = "" // Reset field
+                    showAddListDialog = true
+                },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Add List", tint = MaterialTheme.colorScheme.onPrimary)
+            }
+        }
+    ) { paddingValues ->
+
+        // --- List Display with Drag and Drop ---
+        LazyColumn(
+            state = lazyListState, // Attach state for scroll and layout info
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(listNames, key = { index, item -> item }) { index, name ->
+                val isDragging = index == draggedItemIndex
+                val currentTargetIdx = potentialTargetIndex
+
+                // --- Calculate offset for non-dragged items ---
+                var nonDragItemOffsetTarget = 0f
+                val spacingPx = with(density) { 8.dp.toPx() }
+
+                if (!isDragging && draggedItemIndex != null && currentTargetIdx != null) {
+                    val startIdx = draggedItemIndex!!
+                    val draggedItemHeight = itemHeights[startIdx]?.toFloat() ?: 0f
+
+                    if (draggedItemHeight > 0) {
+                        if (startIdx < currentTargetIdx) {
+                            if (index in (startIdx + 1)..currentTargetIdx) {
+                                nonDragItemOffsetTarget = -draggedItemHeight - spacingPx
+                            }
+                        } else if (startIdx > currentTargetIdx) {
+                            if (index in currentTargetIdx until startIdx) {
+                                nonDragItemOffsetTarget = draggedItemHeight + spacingPx
+                            }
+                        }
+                    }
+                }
+
+                // Animate the offset for non-dragged items for smooth transition
+                val animatedNonDragItemOffset by animateFloatAsState(
+                    targetValue = nonDragItemOffsetTarget,
+                    label = "NonDragItemOffsetAnimation"
+                )
+
+                // Calculate the offset for the dragged item based on gesture
+                val gestureOffsetY = if (isDragging) dragOffset.y - dragInitialOffset.y else 0f
+
+                // Final offset to apply: gesture offset for dragging item, animated shift for others
+                val finalOffsetY = if (isDragging) gestureOffsetY else animatedNonDragItemOffset
+
+                Box(
+                    modifier = Modifier
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .graphicsLayer {
+                            translationY = finalOffsetY
+                        }
+                        .onGloballyPositioned { coordinates ->
+                            itemHeights[index] = coordinates.size.height
+                        }
+                        .pointerInput(Unit) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { offset ->
+                                    if (draggedItemIndex == null) {
+                                        draggedItemIndex = index
+                                        dragInitialOffset = offset
+                                        dragOffset = offset
+                                        potentialTargetIndex = index
+                                    }
+                                },
+                                onDrag = { change, dragAmount ->
+                                    if (index == draggedItemIndex) {
+                                        change.consume()
+                                        dragOffset += dragAmount
+
+                                        val layoutInfo = lazyListState.layoutInfo
+                                        val currentDragGestureOffsetY = dragOffset.y - dragInitialOffset.y
+                                        val draggedItemInfo = layoutInfo.visibleItemsInfo.find { it.index == draggedItemIndex }
+
+                                        if (draggedItemInfo != null) {
+                                            val draggedItemCurrentY = draggedItemInfo.offset + currentDragGestureOffsetY
+                                            val draggedItemCenterY = draggedItemCurrentY + (draggedItemInfo.size / 2f)
+
+                                            val targetItem = layoutInfo.visibleItemsInfo
+                                                .filterNot { it.index == draggedItemIndex }
+                                                .minByOrNull { info ->
+                                                    val infoCenterY = info.offset + (info.size / 2f)
+                                                    abs(infoCenterY - draggedItemCenterY)
+                                                }
+
+                                            potentialTargetIndex = if (targetItem != null) {
+                                                val targetCenterY = targetItem.offset + (targetItem.size / 2f)
+                                                if (draggedItemCenterY > targetCenterY) {
+                                                    // Adjust target index calculation if needed based on visual feedback
+                                                    targetItem.index + if (draggedItemIndex!! < targetItem.index) 0 else 1
+                                                } else {
+                                                    targetItem.index - if (draggedItemIndex!! > targetItem.index) 0 else 0
+                                                }
+                                            } else {
+                                                // Handle edge cases (dragging to top/bottom)
+                                                val firstVisible = layoutInfo.visibleItemsInfo.firstOrNull { it.index != draggedItemIndex }
+                                                val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull { it.index != draggedItemIndex }
+
+                                                when {
+                                                    firstVisible != null && draggedItemCenterY < (firstVisible.offset + (firstVisible.size / 2f)) -> firstVisible.index
+                                                    lastVisible != null && draggedItemCenterY > (lastVisible.offset + (lastVisible.size / 2f)) -> lastVisible.index + 1
+                                                    else -> index // Fallback
+                                                }
+                                            }
+                                            // Ensure potential target index stays within bounds
+                                            potentialTargetIndex = potentialTargetIndex?.coerceIn(0, listNames.size -1) // Coerce to valid list index
+
+                                        } else {
+                                            Log.w("DragAndDrop", "Dragged item info became null during drag for index $draggedItemIndex")
+                                            // Reset state if item info is lost
+                                            draggedItemIndex = null
+                                            potentialTargetIndex = null
+                                        }
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (index == draggedItemIndex) {
+                                        val startIndex = draggedItemIndex!!
+                                        // Use the final potentialTargetIndex, ensuring it's not null and within bounds
+                                        val endIndex = potentialTargetIndex?.coerceIn(0, listNames.size -1) ?: startIndex
+
+                                        if (startIndex != endIndex) {
+                                            // Call the move callback for UI update (not persisted)
+                                            onMoveList(startIndex, endIndex)
+                                        }
+
+                                        // Reset drag state regardless of move
+                                        draggedItemIndex = null
+                                        potentialTargetIndex = null
+                                        dragOffset = Offset.Zero
+                                        dragInitialOffset = Offset.Zero
+                                    }
+                                },
+                                onDragCancel = {
+                                     if (index == draggedItemIndex) {
+                                        // Reset drag state on cancel
+                                        draggedItemIndex = null
+                                        potentialTargetIndex = null
+                                        dragOffset = Offset.Zero
+                                        dragInitialOffset = Offset.Zero
+                                     }
+                                }
+                            )
+                        }
+                ) {
+                    ListCard(
+                        listName = name,
+                        isDragging = isDragging,
+                        taskCount = tasks.count { it.list == name }, // Pass task count to ListCard
+                        onEditClick = {
+                            listToEditIndex = index
+                            // Pre-fill dialog with the current name from the list
+                            editedListName = listNames.getOrElse(index) { "" }
+                            showEditDialog = true
+                        },
+                        onDeleteClick = {
+                            listToDeleteIndex = index
+                            showDeleteConfirmDialog = true
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // --- Dialogs ---
+
+    // Add List Dialog
+    if (showAddListDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddListDialog = false; newListName = "" },
+            containerColor = Color.White,
+            titleContentColor = Color.Black,
+            textContentColor = Color.Black,
+            title = { Text("Create New List") },
+            text = {
+                OutlinedTextField(
+                    value = newListName,
+                    onValueChange = { newListName = it },
+                    label = { Text("List Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.Black, unfocusedTextColor = Color.Black,
+                        focusedLabelColor = DarkBlue, unfocusedLabelColor = Color.Gray,
+                        focusedBorderColor = DarkBlue, unfocusedBorderColor = Color.Gray,
+                        cursorColor = DarkBlue
+                    ),
+                    // Add check for existing names (case-insensitive)
+                    isError = listNames.any { it.equals(newListName.trim(), ignoreCase = true) }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmedName = newListName.trim()
+                        onAddList(trimmedName) // Call the callback provided by MainActivity
+                        showAddListDialog = false
+                        newListName = "" // Clear field
+                    },
+                    // Disable if blank or name already exists (case-insensitive)
+                    enabled = newListName.isNotBlank() && listNames.none { it.equals(newListName.trim(), ignoreCase = true) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddListDialog = false; newListName = "" },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Edit List Dialog
+    if (showEditDialog && listToEditIndex != null) {
+        val originalName = listNames.getOrNull(listToEditIndex!!) ?: ""
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false; listToEditIndex = null },
+            containerColor = Color.White,
+            titleContentColor = Color.Black,
+            textContentColor = Color.Black,
+            title = { Text("Edit List Name") },
+            text = {
+                 OutlinedTextField(
+                    value = editedListName,
+                    onValueChange = { editedListName = it },
+                    label = { Text("New List Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.Black, unfocusedTextColor = Color.Black,
+                        focusedLabelColor = DarkBlue, unfocusedLabelColor = Color.Gray,
+                        focusedBorderColor = DarkBlue, unfocusedBorderColor = Color.Gray,
+                        cursorColor = DarkBlue
+                    ),
+                    // Add check for existing names (case-insensitive), excluding the original name
+                    isError = listNames.any { it.equals(editedListName.trim(), ignoreCase = true) && !it.equals(originalName, ignoreCase = true) }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmedName = editedListName.trim()
+                        listToEditIndex?.let { index ->
+                            onEditList(index, trimmedName) // Call the callback
+                        }
+                        showEditDialog = false
+                        listToEditIndex = null
+                        // editedListName = "" // Don't clear here, might be needed if dialog reappears quickly
+                    },
+                    // Disable if blank or name already exists (case-insensitive), excluding original
+                     enabled = editedListName.isNotBlank() && listNames.none { it.equals(editedListName.trim(), ignoreCase = true) && !it.equals(originalName, ignoreCase = true) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showEditDialog = false; listToEditIndex = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Delete Confirmation Dialog
+    if (showDeleteConfirmDialog && listToDeleteIndex != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false; listToDeleteIndex = null },
+            containerColor = Color.White,
+            titleContentColor = Color.Black,
+            textContentColor = Color.Black,
+            title = { Text("Confirm Deletion") },
+            text = { Text("Are you sure you want to delete the list '${listNames.getOrNull(listToDeleteIndex!!)}'? This will also delete all tasks associated with this list.") }, // Updated warning
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        listToDeleteIndex?.let { index ->
+                            onDeleteList(index) // Call the callback
+                        }
+                        showDeleteConfirmDialog = false
+                        listToDeleteIndex = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkRed)
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmDialog = false; listToDeleteIndex = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+// --- Simple Composable for the List Card ---
+@Composable
+fun ListCard(
+    listName: String,
+    isDragging: Boolean,
+    taskCount: Int = 0,  // Add parameter for task count with default value
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 1.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDragging) LightBlue.copy(alpha = 0.9f) else LightBlue
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = listName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.Black
+                )
+                // Add task count text
+                Text(
+                    text = "$taskCount task${if (taskCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.DarkGray
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(onClick = onEditClick, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = "Edit List",
+                    tint = DarkBlue
+                )
+            }
+            IconButton(onClick = onDeleteClick, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "Delete List",
+                    tint = DarkRed
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(
+    navController: NavHostController,
+    listNames: List<String>,
+    tasks: List<Task>,
+    onAddTask: (Task) -> Unit,
+    onDeleteTask: (Task) -> Unit,
+    onUpdateTask: (Task) -> Unit // Add callback to update task (for time tracking)
+) {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    // Update drawer items to include Pomodoro
+    val drawerItems = listOf(
+        AppDestinations.MAIN_SCREEN to "Calendar",
+        AppDestinations.LISTS_SCREEN to "Lists",
+        AppDestinations.POMODORO_SCREEN to "Pomodoro"
+    )
+
+    // Local state for the Add Task Dialog form
+    var showAddTaskDialog by remember { mutableStateOf(false) }
+    var newTaskName by rememberSaveable { mutableStateOf("") }
+    var newTaskDescription by rememberSaveable { mutableStateOf("") }
+    var newTaskDate by rememberSaveable { mutableStateOf(Calendar.getInstance()) } // Keep Calendar instance
+    var newTaskPriority by rememberSaveable { mutableStateOf(TaskPriority.MEDIUM) }
+    var newTaskList by rememberSaveable { mutableStateOf<String?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var isListDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Add state for delete confirmation dialog
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var taskToDelete by remember { mutableStateOf<Task?>(null) }
+
+    // Add state for edit task dialog
+    var showEditTaskDialog by remember { mutableStateOf(false) }
+    var taskToEdit by remember { mutableStateOf<Task?>(null) }
+
+    // Selected date for filtering tasks (default to today)
+    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
+
+    // Function to check if two dates are the same day
+    val isSameDay = { date1: Calendar, date2: Calendar ->
+        date1.get(Calendar.YEAR) == date2.get(Calendar.YEAR) &&
+        date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
+        date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
+    }
+
+    // Filter tasks for the selected date directly from the passed 'tasks' list
+    val filteredTasks = remember(tasks, selectedDate) {
+        tasks.filter { task -> isSameDay(task.dueDate, selectedDate) }
+            .sortedWith(compareBy<Task> { it.priority }.thenBy { it.name }) // Sort by priority then name
+    }
+
+    // Force recomposition every second when any task is being tracked
+    val isAnyTaskTracking = tasks.any { it.isTracking }
+    var tickerState by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    // This LaunchedEffect is crucial for updating the timer display
+    LaunchedEffect(isAnyTaskTracking) {
+        if (isAnyTaskTracking) {
+            while (true) {
+                delay(50) // Update 20 times per second for very smooth updates
+                tickerState = System.currentTimeMillis() // Trigger recomposition
+            }
+        }
+    }
+
+    // Calculate total tracked time for the selected date
+    val totalTrackedTime = remember(tasks, selectedDate, tickerState) {
+        tasks.filter { task -> isSameDay(task.dueDate, selectedDate) }
+            .sumOf { task ->
+                if (task.isTracking) {
+                    task.trackedTimeMillis + (System.currentTimeMillis() - task.trackingStartTime)
+                } else {
+                    task.trackedTimeMillis
+                }
+            }
+    }
+
+    // Format the total tracked time
+    val formattedTotalTime = formatTime(totalTrackedTime)
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(drawerContainerColor = Color.White) {
+                Spacer(Modifier.height(12.dp))
+                drawerItems.forEach { (route, label) ->
+                    NavigationDrawerItem(
+                        icon = { /* Optional Icon */ },
+                        label = { Text(label) },
+                        selected = route == currentRoute,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            if (route != currentRoute) {
+                                navController.navigate(route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedTextColor = Color.Black,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                }
+            }
+        }
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.White,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "TIJA",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            scope.launch { drawerState.open() }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.Menu,
+                                contentDescription = "Open Navigation Menu"
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = {
+                        // Reset form fields
+                        newTaskName = ""
+                        newTaskDescription = ""
+                        // Default new task date to the currently selected date on the calendar
+                        newTaskDate = selectedDate.clone() as Calendar
+                        newTaskPriority = TaskPriority.MEDIUM
+                        newTaskList = null // Reset list selection
+                        isListDropdownExpanded = false // Ensure dropdown is closed
+                        showAddTaskDialog = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "Add Task",
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                // Pass the selected date and update callback to WeekCalendar
+                WeekCalendar(
+                    selectedDate = selectedDate,
+                    onDateSelected = { newDate ->
+                        selectedDate = newDate
+                    },
+                    tasks = tasks // Pass all tasks to the calendar
+                )
+
+                // Format the date for the header using "MMMM d"
+                val headerDateFormatter = SimpleDateFormat("MMMM d", Locale.getDefault())
+                val headerText = if (totalTrackedTime > 0) {
+                    "Tasks for ${headerDateFormatter.format(selectedDate.time)} ($formattedTotalTime)"
+                } else {
+                    "Tasks for ${headerDateFormatter.format(selectedDate.time)}"
+                }
+
+                Text(
+                    text = headerText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Blue,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+
+                // Display filtered tasks or empty message
+                if (filteredTasks.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize() // Fill remaining space
+                            .padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No tasks for this day. Click + to add a task.",
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize() // Fill remaining space
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp) // Add padding at the bottom
+                    ) {
+                        items(filteredTasks, key = { task -> task.id }) { task -> // Use task.id as key
+                            TaskCard(
+                                task = task,
+                                onDeleteClick = {
+                                    // Show confirmation dialog instead of deleting immediately
+                                    taskToDelete = task
+                                    showDeleteConfirmDialog = true
+                                },
+                                onEditClick = {
+                                    // Set the task to edit and show edit dialog
+                                    taskToEdit = task
+                                    // Pre-fill the edit form with task data
+                                    newTaskName = task.name
+                                    newTaskDescription = task.description
+                                    newTaskDate = task.dueDate.clone() as Calendar
+                                    newTaskPriority = task.priority
+                                    newTaskList = task.list
+                                    showEditTaskDialog = true
+                                },
+                                onClick = {
+                                    // Same as onEditClick
+                                    taskToEdit = task
+                                    newTaskName = task.name
+                                    newTaskDescription = task.description
+                                    newTaskDate = task.dueDate.clone() as Calendar
+                                    newTaskPriority = task.priority
+                                    newTaskList = task.list
+                                    showEditTaskDialog = true
+                                },
+                                onTrackingToggle = { isTracking ->
+                                    // Add more detailed logging
+                                    Log.d("MainScreen", "Tracking toggled for task: ${task.name}, isTracking: $isTracking")
+
+                                    val updatedTask = if (isTracking) {
+                                        // Start tracking
+                                        task.copy(
+                                            isTracking = true,
+                                            trackingStartTime = System.currentTimeMillis()
+                                        )
+                                    } else {
+                                        // Stop tracking and update total time
+                                        val elapsedTime = System.currentTimeMillis() - task.trackingStartTime
+                                        task.copy(
+                                            isTracking = false,
+                                            trackedTimeMillis = task.trackedTimeMillis + elapsedTime
+                                        )
+                                    }
+
+                                    // Add more logging to verify the updated task
+                                    Log.d("MainScreen", "Updated task: ${updatedTask.name}, isTracking: ${updatedTask.isTracking}, trackedTime: ${updatedTask.trackedTimeMillis}")
+
+                                    // Call the callback to update the task
+                                    onUpdateTask(updatedTask)
+                                },
+                                onCompletedChange = { isCompleted ->
+                                    // Create updated task with new completed state
+                                    val updatedTask = task.copy(completed = isCompleted)
+                                    // Call the callback to update the task
+                                    onUpdateTask(updatedTask)
+                                },
+                                currentTimeMillis = tickerState // Pass current time for live updates
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Add Task Dialog
+    if (showAddTaskDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddTaskDialog = false },
+            containerColor = Color.White,
+            titleContentColor = Color.Black,
+            textContentColor = Color.Black,
+            title = { Text("Create New Task") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Task Name
+                    OutlinedTextField(
+                        value = newTaskName,
+                        onValueChange = { newTaskName = it },
+                        label = { Text("Task Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedLabelColor = DarkBlue,
+                            unfocusedLabelColor = Color.Gray,
+                            focusedBorderColor = DarkBlue,
+                            unfocusedBorderColor = Color.Gray,
+                            cursorColor = DarkBlue
+                        )
+                    )
+
+                    // Description
+                    OutlinedTextField(
+                        value = newTaskDescription,
+                        onValueChange = { newTaskDescription = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedLabelColor = DarkBlue,
+                            unfocusedLabelColor = Color.Gray,
+                            focusedBorderColor = DarkBlue,
+                            unfocusedBorderColor = Color.Gray,
+                            cursorColor = DarkBlue
+                        )
+                    )
+
+                    // Date Picker Trigger
+                    val dateFormatter = SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault())
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Date: ", color = Color.Black)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = dateFormatter.format(newTaskDate.time),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { showDatePicker = true }
+                                .border(BorderStroke(1.dp, Color.Gray), RoundedCornerShape(4.dp)) // Add border
+                                .padding(vertical = 8.dp, horizontal = 12.dp), // Add padding
+                            color = DarkBlue
+                        )
+                        IconButton(onClick = { showDatePicker = true }) {
+                             Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
+                        }
+                    }
+
+                    // Priority Selection
+                    Text("Priority:", color = Color.Black)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        PriorityOption(
+                            priority = TaskPriority.HIGH,
+                            selected = newTaskPriority == TaskPriority.HIGH,
+                            onClick = { newTaskPriority = TaskPriority.HIGH }
+                        )
+                        PriorityOption(
+                            priority = TaskPriority.MEDIUM,
+                            selected = newTaskPriority == TaskPriority.MEDIUM,
+                            onClick = { newTaskPriority = TaskPriority.MEDIUM }
+                        )
+                        PriorityOption(
+                            priority = TaskPriority.LOW,
+                            selected = newTaskPriority == TaskPriority.LOW,
+                            onClick = { newTaskPriority = TaskPriority.LOW }
+                        )
+                        PriorityOption(
+                            priority = TaskPriority.VERY_LOW,
+                            selected = newTaskPriority == TaskPriority.VERY_LOW,
+                            onClick = { newTaskPriority = TaskPriority.VERY_LOW }
+                        )
+                    }
+
+                    // List Selection Dropdown
+                    Text("List:", color = Color.Black)
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = newTaskList ?: "None", // Display selected list or "None"
+                            onValueChange = { }, // Read-only
+                            readOnly = true,
+                            label = { Text("Select List (Optional)") },
+                            trailingIcon = {
+                                IconButton(onClick = { isListDropdownExpanded = !isListDropdownExpanded }) {
+                                    Icon(
+                                        if (isListDropdownExpanded)
+                                            Icons.Filled.KeyboardArrowUp
+                                        else
+                                            Icons.Filled.KeyboardArrowDown,
+                                        contentDescription = "Toggle List Dropdown"
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isListDropdownExpanded = true }, // Open dropdown on click
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.Black,
+                                unfocusedTextColor = Color.Black,
+                                focusedLabelColor = DarkBlue,
+                                unfocusedLabelColor = Color.Gray,
+                                focusedBorderColor = DarkBlue,
+                                unfocusedBorderColor = Color.Gray,
+                                cursorColor = DarkBlue,
+                                // Make it look read-only
+                                disabledTextColor = Color.Black,
+                                disabledBorderColor = Color.Gray,
+                                disabledLabelColor = Color.Gray,
+                                disabledTrailingIconColor = DarkBlue
+                            ),
+                            enabled = false // Disable direct text input
+                        )
+
+                        DropdownMenu(
+                            expanded = isListDropdownExpanded,
+                            onDismissRequest = { isListDropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.9f) // Adjust width as needed
+                        ) {
+                            // "None" option
+                            DropdownMenuItem(
+                                text = { Text("None") },
+                                onClick = {
+                                    newTaskList = null
+                                    isListDropdownExpanded = false
+                                }
+                            )
+
+                            // Options from listNames
+                            if (listNames.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "No lists available. Create lists first.",
+                                            color = Color.Gray,
+                                            fontSize = 14.sp
+                                        )
+                                    },
+                                    onClick = { },
+                                    enabled = false
+                                )
+                            } else {
+                                listNames.forEach { listName ->
+                                    DropdownMenuItem(
+                                        text = { Text(listName) },
+                                        onClick = {
+                                            newTaskList = listName
+                                            isListDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newTaskName.isNotBlank()) {
+                            // Create Task object (without ID initially)
+                            val newTask = Task(
+                                name = newTaskName.trim(),
+                                description = newTaskDescription.trim(),
+                                dueDate = newTaskDate.clone() as Calendar, // Clone to avoid mutation issues
+                                priority = newTaskPriority,
+                                list = newTaskList
+                            )
+                            onAddTask(newTask) // Call the callback to handle DB insertion
+                            showAddTaskDialog = false
+                            // Reset fields (optional, happens on next FAB click anyway)
+                            // newTaskName = "" ... etc.
+                        }
+                    },
+                    enabled = newTaskName.isNotBlank(), // Basic validation
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddTaskDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Edit Task Dialog (similar to Add Task Dialog but with pre-filled data)
+    if (showEditTaskDialog && taskToEdit != null) {
+        // Add state for time editing
+        var editedTimeString by remember(taskToEdit) {
+            mutableStateOf(formatTime(taskToEdit!!.trackedTimeMillis))
+        }
+        var timeError by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = {
+                showEditTaskDialog = false
+                taskToEdit = null
+            },
+            containerColor = Color.White,
+            titleContentColor = Color.Black,
+            textContentColor = Color.Black,
+            title = { Text("Edit Task") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Task Name
+                    OutlinedTextField(
+                        value = newTaskName,
+                        onValueChange = { newTaskName = it },
+                        label = { Text("Task Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedLabelColor = DarkBlue,
+                            unfocusedLabelColor = Color.Gray,
+                            focusedBorderColor = DarkBlue,
+                            unfocusedBorderColor = Color.Gray,
+                            cursorColor = DarkBlue
+                        )
+                    )
+
+                    // Description
+                    OutlinedTextField(
+                        value = newTaskDescription,
+                        onValueChange = { newTaskDescription = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedLabelColor = DarkBlue,
+                            unfocusedLabelColor = Color.Gray,
+                            focusedBorderColor = DarkBlue,
+                            unfocusedBorderColor = Color.Gray,
+                            cursorColor = DarkBlue
+                        )
+                    )
+
+                    // Date Picker Trigger
+                    val dateFormatter = SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault())
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Date: ", color = Color.Black)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = dateFormatter.format(newTaskDate.time),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { showDatePicker = true }
+                                .border(BorderStroke(1.dp, Color.Gray), RoundedCornerShape(4.dp)) // Add border
+                                .padding(vertical = 8.dp, horizontal = 12.dp), // Add padding
+                            color = DarkBlue
+                        )
+                        IconButton(onClick = { showDatePicker = true }) {
+                             Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
+                        }
+                    }
+
+                    // Priority Selection
+                    Text("Priority:", color = Color.Black)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        PriorityOption(
+                            priority = TaskPriority.HIGH,
+                            selected = newTaskPriority == TaskPriority.HIGH,
+                            onClick = { newTaskPriority = TaskPriority.HIGH }
+                        )
+                        PriorityOption(
+                            priority = TaskPriority.MEDIUM,
+                            selected = newTaskPriority == TaskPriority.MEDIUM,
+                            onClick = { newTaskPriority = TaskPriority.MEDIUM }
+                        )
+                        PriorityOption(
+                            priority = TaskPriority.LOW,
+                            selected = newTaskPriority == TaskPriority.LOW,
+                            onClick = { newTaskPriority = TaskPriority.LOW }
+                        )
+                        PriorityOption(
+                            priority = TaskPriority.VERY_LOW,
+                            selected = newTaskPriority == TaskPriority.VERY_LOW,
+                            onClick = { newTaskPriority = TaskPriority.VERY_LOW }
+                        )
+                    }
+
+                    // List Selection Dropdown
+                    Text("List:", color = Color.Black)
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = newTaskList ?: "None", // Display selected list or "None"
+                            onValueChange = { }, // Read-only
+                            readOnly = true,
+                            label = { Text("Select List (Optional)") },
+                            trailingIcon = {
+                                IconButton(onClick = { isListDropdownExpanded = !isListDropdownExpanded }) {
+                                    Icon(
+                                        if (isListDropdownExpanded)
+                                            Icons.Filled.KeyboardArrowUp
+                                        else
+                                            Icons.Filled.KeyboardArrowDown,
+                                        contentDescription = "Toggle List Dropdown"
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isListDropdownExpanded = true }, // Open dropdown on click
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.Black,
+                                unfocusedTextColor = Color.Black,
+                                focusedLabelColor = DarkBlue,
+                                unfocusedLabelColor = Color.Gray,
+                                focusedBorderColor = DarkBlue,
+                                unfocusedBorderColor = Color.Gray,
+                                cursorColor = DarkBlue,
+                                // Make it look read-only
+                                disabledTextColor = Color.Black,
+                                disabledBorderColor = Color.Gray,
+                                disabledLabelColor = Color.Gray,
+                                disabledTrailingIconColor = DarkBlue
+                            ),
+                            enabled = false // Disable direct text input
+                        )
+
+                        DropdownMenu(
+                            expanded = isListDropdownExpanded,
+                            onDismissRequest = { isListDropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.9f) // Adjust width as needed
+                        ) {
+                            // "None" option
+                            DropdownMenuItem(
+                                text = { Text("None") },
+                                onClick = {
+                                    newTaskList = null
+                                    isListDropdownExpanded = false
+                                }
+                            )
+
+                            // Options from listNames
+                            if (listNames.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "No lists available. Create lists first.",
+                                            color = Color.Gray,
+                                            fontSize = 14.sp
+                                        )
+                                    },
+                                    onClick = { },
+                                    enabled = false
+                                )
+                            } else {
+                                listNames.forEach { listName ->
+                                    DropdownMenuItem(
+                                        text = { Text(listName) },
+                                        onClick = {
+                                            newTaskList = listName
+                                            isListDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // After list selection dropdown, add time editor
+                    Text("Tracked Time:", color = Color.Black)
+                    OutlinedTextField(
+                        value = editedTimeString,
+                        onValueChange = { input ->
+                            editedTimeString = input
+                            // Validate time format (HH:MM:SS)
+                            timeError = if (input.matches(Regex("^\\d{2}:\\d{2}:\\d{2}$"))) {
+                                null
+                            } else {
+                                "Use format: 00:00:00 (hours:minutes:seconds)"
+                            }
+                        },
+                        label = { Text("Time (HH:MM:SS)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = timeError != null,
+                        supportingText = { timeError?.let { Text(it) } },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedLabelColor = DarkBlue,
+                            unfocusedLabelColor = Color.Gray,
+                            focusedBorderColor = DarkBlue,
+                            unfocusedBorderColor = Color.Gray,
+                            cursorColor = DarkBlue
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newTaskName.isNotBlank() && taskToEdit != null && timeError == null) {
+                            // Parse the edited time string to milliseconds
+                            val timeMillis = parseTimeToMillis(editedTimeString)
+
+                            // Create updated Task object with the same ID
+                            val updatedTask = Task(
+                                id = taskToEdit!!.id, // Keep the same ID
+                                name = newTaskName.trim(),
+                                description = newTaskDescription.trim(),
+                                dueDate = newTaskDate.clone() as Calendar,
+                                priority = newTaskPriority,
+                                list = newTaskList,
+                                trackedTimeMillis = timeMillis, // Use the edited time
+                                isTracking = taskToEdit!!.isTracking,
+                                trackingStartTime = taskToEdit!!.trackingStartTime
+                            )
+
+                            // Delete the old task and add the updated one
+                            onDeleteTask(taskToEdit!!)
+                            onAddTask(updatedTask)
+
+                            showEditTaskDialog = false
+                            taskToEdit = null
+                        }
+                    },
+                    enabled = newTaskName.isNotBlank() && timeError == null,
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showEditTaskDialog = false
+                        taskToEdit = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Delete Confirmation Dialog
+    if (showDeleteConfirmDialog && taskToDelete != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteConfirmDialog = false
+                taskToDelete = null
+            },
+            containerColor = Color.White,
+            titleContentColor = Color.Black,
+            textContentColor = Color.Black,
+            title = { Text("Confirm Deletion") },
+            text = { Text("Are you sure you want to delete the task '${taskToDelete?.name}'?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        taskToDelete?.let { task ->
+                            onDeleteTask(task) // Call the callback
+                        }
+                        showDeleteConfirmDialog = false
+                        taskToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkRed)
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        taskToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Date Picker Dialog (remains the same)
+    if (showDatePicker) {
+        DatePickerDialog(
+            initialDate = newTaskDate, // Pass the state variable
+            onDismissRequest = { showDatePicker = false },
+            onDateSelected = { selectedCal ->
+                newTaskDate = selectedCal // Update the state variable
+                showDatePicker = false
+            }
+        )
+    }
+}
+
+// Task data class - Add ID
+data class Task(
+    val id: Int = 0,
+    val name: String,
+    val description: String,
+    val dueDate: Calendar,
+    val priority: TaskPriority,
+    val list: String? = null,
+    val isTracking: Boolean = false,
+    val trackedTimeMillis: Long = 0,
+    val trackingStartTime: Long = 0,
+    val completed: Boolean = false  // Add completed flag
+)
+
+// Task priority enum
+enum class TaskPriority(val color: Color, val label: String) {
+    HIGH(Color.Red, "High"),
+    MEDIUM(Color(0xFFFF9800), "Medium"),  // Orange
+    LOW(DarkBlue, "Low"),
+    VERY_LOW(Color.Gray, "Very Low")
+}
+
+// Priority option composable
+@Composable
+fun PriorityOption(
+    priority: TaskPriority,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .padding(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .background(
+                    color = if (selected) priority.color.copy(alpha = 0.2f) else Color.Transparent,
+                    shape = CircleShape
+                )
+                .padding(4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .background(priority.color, CircleShape)
+            )
+        }
+        Text(
+            text = priority.label,
+            fontSize = 12.sp,
+            color = if (selected) priority.color else Color.Black,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+        )
+    }
+}
+
+// Task card with rounded corners - Updated with better padding
+@Composable
+fun TaskCard(
+    task: Task,
+    onDeleteClick: () -> Unit,
+    onEditClick: () -> Unit = {},
+    onClick: () -> Unit = {},
+    onTrackingToggle: (Boolean) -> Unit = {},
+    onCompletedChange: (Boolean) -> Unit = {}, // Add callback for checkbox
+    currentTimeMillis: Long = 0  // This parameter forces recomposition
+) {
+    val dateFormatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+
+    // Create a separate composable for the timer to ensure it recomposes independently
+    @Composable
+    fun TaskTimer(task: Task, currentTimeMillis: Long) {
+        // The currentTimeMillis parameter is used to force recomposition
+        val displayTime = if (task.isTracking) {
+            val activeTime = System.currentTimeMillis() - task.trackingStartTime
+            formatTime(task.trackedTimeMillis + activeTime)
+        } else {
+            formatTime(task.trackedTimeMillis)
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Filled.Timer,
+                contentDescription = "Tracked Time",
+                tint = DarkBlue,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = displayTime,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = DarkBlue
+            )
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (task.completed)
+                Color.Gray.copy(alpha = 0.2f)
+            else
+                task.priority.color.copy(alpha = 0.1f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Add checkbox
+            Checkbox(
+                checked = task.completed,
+                onCheckedChange = { isChecked ->
+                    onCompletedChange(isChecked)
+                },
+                modifier = Modifier.padding(top = 2.dp, end = 8.dp)
+            )
+
+            // Priority indicator
+            Box(
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .size(12.dp)
+                    .background(task.priority.color, CircleShape)
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Task details
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 2.dp)
+            ) {
+                Text(
+                    text = task.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (task.completed) Color.Gray else Color.Black,
+                    textDecoration = if (task.completed) TextDecoration.LineThrough else null
+                )
+
+                if (task.description.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = task.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.DarkGray,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Display tracked time below description
+                if (task.trackedTimeMillis > 0 || task.isTracking) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    // Use the separate timer composable that will recompose independently
+                    TaskTimer(task = task, currentTimeMillis = currentTimeMillis)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Date
+                    Icon(
+                        imageVector = Icons.Filled.DateRange,
+                        contentDescription = "Due Date",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = dateFormatter.format(task.dueDate.time),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+
+                    // Show list name if available
+                    task.list?.let { listName ->
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        Text(
+                            text = listName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = DarkBlue,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Action buttons
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Play/Pause button with improved clickability
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            color = if (task.isTracking) DarkBlue.copy(alpha = 0.2f) else Color.Transparent,
+                            shape = CircleShape
+                        )
+                        .clickable {
+                            Log.d("TaskCard", "Play/Pause clicked directly for task: ${task.name}, current tracking: ${task.isTracking}")
+                            onTrackingToggle(!task.isTracking)
+                        }
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (task.isTracking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (task.isTracking) "Stop Tracking" else "Start Tracking",
+                        tint = DarkBlue
+                    )
+                }
+
+                // Delete button
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Delete Task",
+                        tint = DarkRed
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Date picker dialog
+@Composable
+fun DatePickerDialog(
+    initialDate: Calendar,
+    onDismissRequest: () -> Unit,
+    onDateSelected: (Calendar) -> Unit
+) {
+    val selectedDate = remember { mutableStateOf(initialDate.clone() as Calendar) }
+    val currentYear = selectedDate.value.get(Calendar.YEAR)
+    val currentMonth = selectedDate.value.get(Calendar.MONTH)
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        containerColor = Color.White,
+        titleContentColor = Color.Black,
+        textContentColor = Color.Black,
+        title = { Text("Select Date") },
+        text = {
+            Column {
+                // Month and Year selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = {
+                        val newDate = selectedDate.value.clone() as Calendar
+                        newDate.add(Calendar.MONTH, -1)
+                        selectedDate.value = newDate
+                    }) {
+                        Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Previous Month")
+                    }
+
+                    val monthYearFormatter = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                    Text(
+                        text = monthYearFormatter.format(selectedDate.value.time),
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    IconButton(onClick = {
+                        val newDate = selectedDate.value.clone() as Calendar
+                        newDate.add(Calendar.MONTH, 1)
+                        selectedDate.value = newDate
+                    }) {
+                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next Month")
+                    }
+                }
+
+                // Days of week header
+                val daysOfWeek = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    daysOfWeek.forEach { day ->
+                        Text(
+                            text = day,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            color = Color.Gray,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Calendar grid
+                val calendar = selectedDate.value.clone() as Calendar
+                calendar.set(Calendar.DAY_OF_MONTH, 1)
+                val firstDayOfMonth = calendar.get(Calendar.DAY_OF_WEEK) - 1
+                val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+                val today = Calendar.getInstance()
+                val selectedDay = selectedDate.value.get(Calendar.DAY_OF_MONTH)
+
+                // Create calendar grid
+                for (i in 0 until 6) { // Max 6 weeks in a month view
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        for (j in 0 until 7) { // 7 days in a week
+                            val day = i * 7 + j - firstDayOfMonth + 1
+
+                            if (day in 1..daysInMonth) {
+                                val isSelected = day == selectedDay
+                                val isToday = today.get(Calendar.YEAR) == currentYear &&
+                                        today.get(Calendar.MONTH) == currentMonth &&
+                                        today.get(Calendar.DAY_OF_MONTH) == day
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .aspectRatio(1f)
+                                        .padding(4.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when {
+                                                isSelected -> MaterialTheme.colorScheme.primary
+                                                isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                                else -> Color.Transparent
+                                            }
+                                        )
+                                        .clickable {
+                                            val newDate = selectedDate.value.clone() as Calendar
+                                            newDate.set(Calendar.DAY_OF_MONTH, day)
+                                            selectedDate.value = newDate
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = day.toString(),
+                                        color = when {
+                                            isSelected -> MaterialTheme.colorScheme.onPrimary
+                                            else -> Color.Black
+                                        }
+                                    )
+                                }
+                            } else {
+                                // Empty space for days outside current month
+                                Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onDateSelected(selectedDate.value) },
+                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismissRequest,
+                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+val PinkHighlight = Color(0xFFFFC1E0)
+
+@Composable
+fun WeekCalendar(
+    selectedDate: Calendar = Calendar.getInstance(),
+    onDateSelected: (Calendar) -> Unit = {},
+    tasks: List<Task> = emptyList() // Add tasks parameter to check for tasks on specific days
+) {
+    var currentCalendar by remember { mutableStateOf(selectedDate.clone() as Calendar) }
+    var showMonthYearDialog by remember { mutableStateOf(false) }
+
+    val today = Calendar.getInstance()
+
+    val monthYearFormatter = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+    val dayFormatter = SimpleDateFormat("d", Locale.getDefault())
+
+    // Function to check if a date has tasks
+    val hasTasksOnDate = { date: Calendar ->
+        tasks.any { task ->
+            date.get(Calendar.YEAR) == task.dueDate.get(Calendar.YEAR) &&
+            date.get(Calendar.MONTH) == task.dueDate.get(Calendar.MONTH) &&
+            date.get(Calendar.DAY_OF_MONTH) == task.dueDate.get(Calendar.DAY_OF_MONTH)
+        }
+    }
+
+    val updateCalendar = { year: Int, month: Int ->
+        val newCalendar = currentCalendar.clone() as Calendar
+        newCalendar.set(Calendar.YEAR, year)
+        newCalendar.set(Calendar.MONTH, month)
+        newCalendar.set(Calendar.DAY_OF_MONTH, 1)
+        currentCalendar = newCalendar
+    }
+
+    val changeMonth = { amount: Int ->
+        val newCalendar = currentCalendar.clone() as Calendar
+        newCalendar.add(Calendar.MONTH, amount)
+        currentCalendar = newCalendar
+    }
+
+    val resetToToday = {
+        currentCalendar = Calendar.getInstance()
+        onDateSelected(Calendar.getInstance())
+    }
+
+    val daysInMonth = currentCalendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val firstDayOfMonth = currentCalendar.clone() as Calendar
+    firstDayOfMonth.set(Calendar.DAY_OF_MONTH, 1)
+
+    // Get the correct day of week (1 = Sunday, 2 = Monday, etc.)
+    val startDayOfWeek = firstDayOfMonth.get(Calendar.DAY_OF_WEEK)
+
+    // Calculate empty cells correctly (0-based index)
+    val emptyCellsBefore = startDayOfWeek - 1
+
+    val calendarDays = List(emptyCellsBefore) { null } + (1..daysInMonth).toList()
+
+    // Use standard day abbreviations that match Calendar.DAY_OF_WEEK
+    val daysOfWeek = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+
+    Column(modifier = Modifier.padding(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { changeMonth(-1) }) {
+                Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Previous Month")
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = resetToToday) {
+                    Icon(
+                        imageVector = Icons.Filled.DateRange,
+                        contentDescription = "Go to Today"
+                    )
+                }
+
+                Text(
+                    text = monthYearFormatter.format(currentCalendar.time),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable { showMonthYearDialog = true }
+                        .padding(horizontal = 4.dp)
+                )
+            }
+
+            IconButton(onClick = { changeMonth(1) }) {
+                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next Month")
+            }
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier.height(30.dp),
+            userScrollEnabled = false
+        ) {
+            items(daysOfWeek) { day ->
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Text(
+                        text = day,
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            userScrollEnabled = false
+        ) {
+            items(calendarDays) { day ->
+                if (day != null) {
+                    val dayCalendar = currentCalendar.clone() as Calendar
+                    dayCalendar.set(Calendar.DAY_OF_MONTH, day)
+
+                    val jalaliDateStr = getJalaliDateString(dayCalendar)
+
+                    val isToday = today.get(Calendar.YEAR) == currentCalendar.get(Calendar.YEAR) &&
+                            today.get(Calendar.MONTH) == currentCalendar.get(Calendar.MONTH) &&
+                            today.get(Calendar.DAY_OF_MONTH) == day
+
+                    val isSelected = selectedDate.get(Calendar.YEAR) == currentCalendar.get(Calendar.YEAR) &&
+                            selectedDate.get(Calendar.MONTH) == currentCalendar.get(Calendar.MONTH) &&
+                            selectedDate.get(Calendar.DAY_OF_MONTH) == day
+
+                    // Check if this day has tasks
+                    val hasTasks = hasTasksOnDate(dayCalendar)
+
+                    val backgroundColor = when {
+                        isSelected -> PinkHighlight
+                        isToday -> MaterialTheme.colorScheme.primary
+                        else -> Color.Transparent
+                    }
+                    val textColor = when {
+                        isSelected -> Color.Black
+                        isToday -> MaterialTheme.colorScheme.onPrimary
+                        else -> Color.Black
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .padding(2.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                val clickedCalendar = currentCalendar.clone() as Calendar
+                                clickedCalendar.set(Calendar.DAY_OF_MONTH, day)
+                                onDateSelected(clickedCalendar)
+                            }
+                            .background(
+                                color = backgroundColor,
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = day.toString(),
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                                color = textColor,
+                                modifier = if (hasTasks) {
+                                    // Add blue underline for days with tasks using drawBehind
+                                    Modifier.drawBehind {
+                                        // Draw a blue line under the text
+                                        drawLine(
+                                            color = DarkBlue,
+                                            start = Offset(0f, size.height),
+                                            end = Offset(size.width, size.height),
+                                            strokeWidth = 2f
+                                        )
+                                    }
+                                } else Modifier
+                            )
+                            Text(
+                                text = jalaliDateStr,
+                                fontSize = 10.sp,
+                                textAlign = TextAlign.Center,
+                                color = if (isSelected || isToday) textColor.copy(alpha = 0.7f) else Color.Gray
+                            )
+                        }
+                    }
+                } else {
+                    Box(modifier = Modifier.aspectRatio(1f).padding(2.dp))
+                }
+            }
+        }
+    }
+
+    if (showMonthYearDialog) {
+        MonthYearPickerDialog(
+            initialCalendar = currentCalendar,
+            onDismissRequest = { showMonthYearDialog = false },
+            onConfirmation = { selectedYear, selectedMonth ->
+                updateCalendar(selectedYear, selectedMonth)
+                showMonthYearDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun MonthYearPickerDialog(
+    initialCalendar: Calendar,
+    onDismissRequest: () -> Unit,
+    onConfirmation: (year: Int, month: Int) -> Unit
+) {
+    var selectedYear by remember { mutableIntStateOf(initialCalendar.get(Calendar.YEAR)) }
+    var selectedMonth by remember { mutableIntStateOf(initialCalendar.get(Calendar.MONTH)) }
+
+    val monthNames = remember { DateFormatSymbols(Locale.getDefault()).months }
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    val yearRange = remember { (currentYear - 10)..3000 }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        containerColor = Color.White,
+        titleContentColor = Color.Black,
+        textContentColor = Color.Black,
+        title = { Text("Select Month and Year") },
+        text = {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = {
+                        if (selectedYear > yearRange.first) selectedYear--
+                    }, enabled = selectedYear > yearRange.first) {
+                        Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Previous Year", tint = Color.Black)
+                    }
+                    Text(selectedYear.toString(), fontWeight = FontWeight.Bold, color = Color.Black)
+                    IconButton(onClick = {
+                         if (selectedYear < yearRange.last) selectedYear++
+                    }, enabled = selectedYear < yearRange.last) {
+                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next Year", tint = Color.Black)
+                    }
+                }
+
+                Text("Month:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp), color = Color.Black)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    items(monthNames.size -1) { monthIndex ->
+                         if (monthNames[monthIndex].isNotEmpty()) {
+                            val isSelected = monthIndex == selectedMonth
+                            TextButton(
+                                onClick = { selectedMonth = monthIndex },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = if (isSelected) DarkBlue else Color.Black
+                                )
+                            ) {
+                                Text(
+                                    text = monthNames[monthIndex].take(3),
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirmation(selectedYear, selectedMonth) },
+                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismissRequest,
+                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+fun getJalaliDateString(gregorianCalendar: java.util.Calendar): String {
+    try {
+        val gregorianYear = gregorianCalendar.get(Calendar.YEAR)
+        val gregorianMonth = gregorianCalendar.get(Calendar.MONTH) + 1
+        val gregorianDay = gregorianCalendar.get(Calendar.DAY_OF_MONTH)
+
+        val jalaliDate = gregorianToJalali(gregorianYear, gregorianMonth, gregorianDay)
+
+        return String.format(Locale.getDefault(), "%02d/%02d", jalaliDate[2], jalaliDate[1])
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return "--/--"
+    }
+}
+
+fun gregorianToJalali(gregorianYear: Int, gregorianMonth: Int, gregorianDay: Int): IntArray {
+    val breaks = intArrayOf(
+        -61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181,
+        1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178
+    )
+
+    var jy = 0
+    var jm: Int
+    var jd: Int
+
+    val gy = gregorianYear - 1600
+    val gm = gregorianMonth - 1
+    val gd = gregorianDay - 1
+
+    var gDayNo = 365 * gy + (gy + 3) / 4 - (gy + 99) / 100 + (gy + 399) / 400
+
+    var i = 0
+    while (i < gm) {
+        gDayNo += gregorianDaysInMonth[i]
+        i++
+    }
+
+    if (gm > 1 && ((gy % 4 == 0 && gy % 100 != 0) || (gy % 400 == 0)))
+        gDayNo++
+
+    gDayNo += gd
+
+    var jDayNo = gDayNo - 79
+
+    val jNp = jDayNo / 12053
+    jDayNo %= 12053
+
+    jy = 979 + 33 * jNp + 4 * (jDayNo / 1461)
+    jDayNo %= 1461
+
+    if (jDayNo >= 366) {
+        jy += (jDayNo - 1) / 365
+        jDayNo = (jDayNo - 1) % 365
+    }
+
+    i = 0
+    while (i < 11 && jDayNo >= jalaliDaysInMonth[i]) {
+        jDayNo -= jalaliDaysInMonth[i]
+        i++
+    }
+
+    jm = i + 1
+    jd = jDayNo + 1
+
+    return intArrayOf(jy, jm, jd)
+}
+
+val gregorianDaysInMonth = intArrayOf(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+val jalaliDaysInMonth = intArrayOf(31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29)
+
+@Preview(showBackground = true)
+@Composable
+fun MainScreenPreview() {
+    JitaTheme {
+        // Preview needs dummy data or a way to mock the DAO/callbacks
+        val dummyTasks = listOf(
+            Task(1, "Task 1", "Desc 1", Calendar.getInstance(), TaskPriority.HIGH, "Work"),
+            Task(2, "Task 2", "Desc 2", Calendar.getInstance(), TaskPriority.MEDIUM, null)
+        )
+        val dummyLists = listOf("Work", "Personal")
+        MainScreen(
+            navController = rememberNavController(),
+            listNames = dummyLists,
+            tasks = dummyTasks,
+            onAddTask = {},
+            onDeleteTask = {},
+            onUpdateTask = {}
+        )
+    }
+}
+
+// Improved time formatting function to ensure HH:MM:SS format
+fun formatTime(timeMillis: Long): String {
+    val totalSeconds = timeMillis / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+
+    return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+// Add this function to parse time string (HH:MM:SS) to milliseconds
+fun parseTimeToMillis(timeString: String): Long {
+    try {
+        val parts = timeString.split(":")
+        if (parts.size != 3) return 0L
+
+        val hours = parts[0].toLongOrNull() ?: 0L
+        val minutes = parts[1].toLongOrNull() ?: 0L
+        val seconds = parts[2].toLongOrNull() ?: 0L
+
+        return (hours * 3600 + minutes * 60 + seconds) * 1000
+    } catch (e: Exception) {
+        return 0L
+    }
+}
+
+// Create a new file for the Pomodoro screen
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PomodoroScreen(navController: NavHostController) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = Color.White,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Pomodoro",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Pomodoro Screen Content")
+        }
+    }
+}
