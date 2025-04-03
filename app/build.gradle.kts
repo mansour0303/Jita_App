@@ -61,7 +61,13 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation("androidx.compose.material:material-icons-core-android:1.6.7")
     implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
-    
+    implementation ("io.coil-kt:coil:2.4.0")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-gif:2.6.0")
+    implementation ("androidx.compose.foundation:foundation:1.6.7")
+    implementation ("androidx.appcompat:appcompat:1.6.1")
+    implementation ("com.github.bumptech.glide:glide:4.16.0")
+
     // Navigation
     val navVersion = "2.7.7"
     implementation("androidx.navigation:navigation-compose:$navVersion")

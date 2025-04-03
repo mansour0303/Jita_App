@@ -1,10 +1,13 @@
 package com.example.jita
 
+//import androidx.compose.material3.AsyncImagePainter
+import android.os.Build.VERSION.SDK_INT
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
@@ -44,14 +48,17 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -67,12 +74,12 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,7 +101,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,6 +118,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import com.example.jita.data.AppDatabase
 import com.example.jita.data.ListNameEntity
 import com.example.jita.data.TaskEntity
@@ -121,6 +135,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
+
 
 // Define navigation routes
 object AppDestinations {
@@ -213,6 +228,15 @@ class MainActivity : ComponentActivity() {
                 }.toMutableStateList()
             }
 
+            // Hoist selectedDate state to be shared
+            var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
+            // Function to check if two dates are the same day (can be kept here or moved to a util file)
+            val isSameDay = { date1: Calendar, date2: Calendar ->
+                date1.get(Calendar.YEAR) == date2.get(Calendar.YEAR) &&
+                date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
+                date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
+            }
+
             // --- Callbacks for ListsScreen (Updated for Database) ---
             val onAddList = { name: String ->
                 if (name.isNotBlank() && listNames.none { it.equals(name, ignoreCase = true) }) {
@@ -262,6 +286,29 @@ class MainActivity : ComponentActivity() {
             }
             // --- End Callbacks ---
 
+            // --- Callbacks for Tasks (passed to MainScreen and PomodoroScreen) ---
+            val onAddTask: (Task) -> Unit = { task -> // Explicitly define return type as Unit
+                scope.launch(Dispatchers.IO) {
+                    taskDao.insertTask(task.toTaskEntity())
+                }
+            }
+            val onDeleteTask: (Task) -> Unit = { task -> // Explicitly define return type as Unit
+                scope.launch(Dispatchers.IO) {
+                    val entityToDelete = allTasksFromDb.find { it.id == task.id }
+                    entityToDelete?.let { taskDao.deleteTask(it) }
+                }
+            }
+            val onUpdateTask: (Task) -> Unit = { task -> // Explicitly define return type as Unit
+                scope.launch(Dispatchers.IO) {
+                    taskDao.updateTask(task.toTaskEntity())
+                }
+            }
+            // Callback to update the shared selectedDate
+            val onDateSelected = { newDate: Calendar ->
+                selectedDate = newDate
+            }
+            // --- End Callbacks ---
+
             JitaTheme {
                 val navController = rememberNavController()
                 NavHost(
@@ -273,26 +320,12 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             listNames = listNames, // Pass derived list names
                             tasks = tasks, // Pass tasks derived from DB
-                            onAddTask = { task -> // Add callback for adding tasks
-                                scope.launch(Dispatchers.IO) {
-                                    // Convert Task to TaskEntity before inserting
-                                    taskDao.insertTask(task.toTaskEntity())
-                                }
-                            },
-                            onDeleteTask = { task -> // Add callback for deleting tasks
-                                scope.launch(Dispatchers.IO) {
-                                     // Need the entity to delete by primary key
-                                     // Find the entity based on the UI Task's ID
-                                     val entityToDelete = allTasksFromDb.find { it.id == task.id }
-                                     entityToDelete?.let { taskDao.deleteTask(it) }
-                                }
-                            },
-                            onUpdateTask = { task -> // Add callback to update task
-                                scope.launch(Dispatchers.IO) {
-                                    // Convert Task to TaskEntity before updating
-                                    taskDao.updateTask(task.toTaskEntity()) // Ensure .toTaskEntity() is called here
-                                }
-                            }
+                            selectedDate = selectedDate, // Pass shared selected date
+                            onDateSelected = onDateSelected, // Pass date selection callback
+                            isSameDay = isSameDay, // Pass date comparison logic
+                            onAddTask = onAddTask,
+                            onDeleteTask = onDeleteTask,
+                            onUpdateTask = onUpdateTask
                         )
                     }
                     composable(AppDestinations.LISTS_SCREEN) {
@@ -306,8 +339,15 @@ class MainActivity : ComponentActivity() {
                             onMoveList = onMoveList
                         )
                     }
-                    composable(AppDestinations.POMODORO_SCREEN) { 
-                        PomodoroScreen(navController = navController)
+                    composable(AppDestinations.POMODORO_SCREEN) {
+                        PomodoroScreen(
+                            navController = navController,
+                            tasks = tasks, // Pass tasks
+                            selectedDate = selectedDate, // Pass shared selected date
+                            onDateSelected = onDateSelected, // Pass date selection callback
+                            isSameDay = isSameDay, // Pass date comparison logic
+                            onUpdateTask = onUpdateTask // Pass task update callback
+                        )
                     }
                 }
             }
@@ -745,9 +785,12 @@ fun MainScreen(
     navController: NavHostController,
     listNames: List<String>,
     tasks: List<Task>,
+    selectedDate: Calendar, // Receive selectedDate
+    onDateSelected: (Calendar) -> Unit, // Receive callback
+    isSameDay: (Calendar, Calendar) -> Boolean, // Receive comparison logic
     onAddTask: (Task) -> Unit,
     onDeleteTask: (Task) -> Unit,
-    onUpdateTask: (Task) -> Unit // Add callback to update task (for time tracking)
+    onUpdateTask: (Task) -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -779,17 +822,7 @@ fun MainScreen(
     var showEditTaskDialog by remember { mutableStateOf(false) }
     var taskToEdit by remember { mutableStateOf<Task?>(null) }
 
-    // Selected date for filtering tasks (default to today)
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
-
-    // Function to check if two dates are the same day
-    val isSameDay = { date1: Calendar, date2: Calendar ->
-        date1.get(Calendar.YEAR) == date2.get(Calendar.YEAR) &&
-        date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
-        date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
-    }
-
-    // Filter tasks for the selected date directly from the passed 'tasks' list
+    // Filter tasks for the selected date using the passed-in state and function
     val filteredTasks = remember(tasks, selectedDate) {
         tasks.filter { task -> isSameDay(task.dueDate, selectedDate) }
             .sortedWith(compareBy<Task> { it.priority }.thenBy { it.name }) // Sort by priority then name
@@ -892,7 +925,7 @@ fun MainScreen(
                         newTaskName = ""
                         newTaskDescription = ""
                         // Default new task date to the currently selected date on the calendar
-                        newTaskDate = selectedDate.clone() as Calendar
+                        newTaskDate = selectedDate.clone() as Calendar // Use passed-in selectedDate
                         newTaskPriority = TaskPriority.MEDIUM
                         newTaskList = null // Reset list selection
                         isListDropdownExpanded = false // Ensure dropdown is closed
@@ -915,10 +948,8 @@ fun MainScreen(
             ) {
                 // Pass the selected date and update callback to WeekCalendar
                 WeekCalendar(
-                    selectedDate = selectedDate,
-                    onDateSelected = { newDate ->
-                        selectedDate = newDate
-                    },
+                    selectedDate = selectedDate, // Use passed-in selectedDate
+                    onDateSelected = onDateSelected, // Use passed-in callback
                     tasks = tasks // Pass all tasks to the calendar
                 )
 
@@ -1542,16 +1573,599 @@ fun MainScreen(
         )
     }
 
-    // Date Picker Dialog (remains the same)
+    // Date Picker Dialog (ensure it updates the correct state variable if needed,
+    // though it seems to update newTaskDate which is fine)
     if (showDatePicker) {
         DatePickerDialog(
-            initialDate = newTaskDate, // Pass the state variable
+            initialDate = newTaskDate, // This is correct for the dialog's purpose
             onDismissRequest = { showDatePicker = false },
             onDateSelected = { selectedCal ->
-                newTaskDate = selectedCal // Update the state variable
+                newTaskDate = selectedCal // Update the dialog's date state
                 showDatePicker = false
             }
         )
+    }
+}
+
+// --- Pomodoro Screen ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PomodoroScreen(
+    navController: NavHostController,
+    tasks: List<Task>,
+    selectedDate: Calendar,
+    onDateSelected: (Calendar) -> Unit,
+    isSameDay: (Calendar, Calendar) -> Boolean,
+    onUpdateTask: (Task) -> Unit
+) {
+    // --- Pomodoro State ---
+    var workDurationMinutes by rememberSaveable { mutableIntStateOf(25) }
+    var shortBreakDurationMinutes by rememberSaveable { mutableIntStateOf(5) }
+    var longBreakDurationMinutes by rememberSaveable { mutableIntStateOf(15) }
+    val cyclesBeforeLongBreak = 4
+
+    var pomodoroState by remember { mutableStateOf(PomodoroMode.Idle) }
+    var timeLeftInMillis by rememberSaveable { mutableStateOf(workDurationMinutes * 60 * 1000L) }
+    var timerRunning by rememberSaveable { mutableStateOf(false) }
+    var cycleCount by rememberSaveable { mutableIntStateOf(0) } // Completed work cycles
+
+    var selectedTask by remember { mutableStateOf<Task?>(null) }
+
+    // --- Calendar Collapse State ---
+    var isCalendarExpanded by remember { mutableStateOf(false) } // Changed to false for collapsed by default
+
+    // --- Settings Dialog State ---
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    // Filter tasks for the selected date
+    val tasksForSelectedDate = remember(tasks, selectedDate) {
+        tasks
+            .filter { task -> isSameDay(task.dueDate, selectedDate) && !task.completed }
+            .sortedBy { it.name }
+    }
+
+    // --- Timer Logic ---
+    LaunchedEffect(timerRunning, timeLeftInMillis) {
+        if (timerRunning && timeLeftInMillis > 0) {
+            delay(1000L) // Wait for 1 second
+            timeLeftInMillis -= 1000L
+        } else if (timerRunning && timeLeftInMillis <= 0) {
+            // Timer finished
+            timerRunning = false
+
+            // If we were in work mode, update the task's tracked time
+            if (pomodoroState == PomodoroMode.Work && selectedTask != null) {
+                val task = selectedTask!!
+                val updatedTask = task.copy(
+                    trackedTimeMillis = task.trackedTimeMillis + (workDurationMinutes * 60 * 1000L)
+                )
+                onUpdateTask(updatedTask)
+                selectedTask = updatedTask
+                cycleCount++ // Increment completed work cycles
+            }
+
+            // Determine next state
+            pomodoroState = when (pomodoroState) {
+                PomodoroMode.Work -> {
+                    if (cycleCount % cyclesBeforeLongBreak == 0) PomodoroMode.LongBreak else PomodoroMode.ShortBreak
+                }
+                PomodoroMode.ShortBreak, PomodoroMode.LongBreak -> PomodoroMode.Work
+                PomodoroMode.Idle -> PomodoroMode.Work // Should ideally not be idle if timer was running
+            }
+
+            // Set time for the next state
+            timeLeftInMillis = when (pomodoroState) {
+                PomodoroMode.Work -> workDurationMinutes * 60 * 1000L
+                PomodoroMode.ShortBreak -> shortBreakDurationMinutes * 60 * 1000L
+                PomodoroMode.LongBreak -> longBreakDurationMinutes * 60 * 1000L
+                PomodoroMode.Idle -> workDurationMinutes * 60 * 1000L
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Pomodoro Timer",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    // Settings button
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Timer Settings"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // Calendar Toggle and Display Area
+            Column {
+                // Row for the "Selected Date" text and the toggle button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // --- Date Display Logic ---
+                    // Gregorian Date Formatting
+                    val gregorianDateFormat = SimpleDateFormat("EEE, MMM dd, yyyy", Locale.getDefault())
+                    val gregorianDateString = gregorianDateFormat.format(selectedDate.time)
+
+                    // Get Jalali date (DD/MM format only)
+                    val jalaliDateString = getJalaliDateString(selectedDate)
+
+                    // Combined Date Text
+                    Text(
+                        text = "$gregorianDateString ($jalaliDateString)", // Display both dates
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    // --- End Date Display Logic ---
+
+                    // Toggle Button
+                    IconButton(onClick = { isCalendarExpanded = !isCalendarExpanded }) {
+                        Icon(
+                            imageVector = if (isCalendarExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = if (isCalendarExpanded) "Collapse Calendar" else "Expand Calendar",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // AnimatedVisibility for the Calendar
+                AnimatedVisibility(visible = isCalendarExpanded) {
+                    WeekCalendar(
+                        selectedDate = selectedDate,
+                        onDateSelected = { newDate ->
+                            // Reset timer if date changes
+                            timerRunning = false
+                            pomodoroState = PomodoroMode.Idle
+                            cycleCount = 0
+                            timeLeftInMillis = workDurationMinutes * 60 * 1000L
+                            selectedTask = null // Deselect task
+                            onDateSelected(newDate) // Call the callback to update the shared state
+                        },
+                        tasks = tasks // Pass all tasks for dot indicators
+                    )
+                }
+            } // End Calendar Section
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Task Selection Section
+            Text(
+                text = "Select a Task to Track",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Task Selection Chips
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (tasksForSelectedDate.isNotEmpty()) {
+                    items(tasksForSelectedDate) { task ->
+                        TaskSelectionChip(
+                            task = task,
+                            isSelected = selectedTask?.id == task.id,
+                            onSelect = { selectedTask = task }
+                        )
+                    }
+                } else {
+                    item {
+                        Text(
+                            text = "No tasks for this date",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Timer Display
+            PomodoroTimerDisplay(
+                timeLeftInMillis = timeLeftInMillis,
+                pomodoroState = pomodoroState,
+                cycleCount = cycleCount,
+                timerRunning = timerRunning // Add timerRunning parameter
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Controls
+            PomodoroControls(
+                timerRunning = timerRunning,
+                pomodoroState = pomodoroState,
+                hasSelectedTask = selectedTask != null,
+                onStartPause = {
+                    if (pomodoroState == PomodoroMode.Idle && !timerRunning) {
+                        // If starting from idle, set to work mode
+                        pomodoroState = PomodoroMode.Work
+                        timeLeftInMillis = workDurationMinutes * 60 * 1000L
+                    }
+                    timerRunning = !timerRunning
+                },
+                onReset = {
+                    timerRunning = false
+                    pomodoroState = PomodoroMode.Idle
+                    cycleCount = 0
+                    timeLeftInMillis = workDurationMinutes * 60 * 1000L
+                },
+                onSkip = {
+                    timerRunning = false
+
+                    // If skipping work mode, add partial time to task
+                    if (pomodoroState == PomodoroMode.Work && selectedTask != null) {
+                        val task = selectedTask!!
+                        val elapsedTime = (workDurationMinutes * 60 * 1000L) - timeLeftInMillis
+                        if (elapsedTime > 0) {
+                             // Only update if some time was spent
+                             val updatedTask = task.copy(
+                                 trackedTimeMillis = task.trackedTimeMillis + elapsedTime
+                             )
+                             onUpdateTask(updatedTask)
+                             selectedTask = updatedTask
+                             cycleCount++ // Count the skipped work cycle
+                        } else if (pomodoroState == PomodoroMode.Work) {
+                            // If skipping work immediately, still count the cycle attempt
+                            cycleCount++
+                        }
+                    }
+
+                    // Determine next state (same logic as timer finishing)
+                    pomodoroState = when (pomodoroState) {
+                        PomodoroMode.Work -> {
+                            if (cycleCount % cyclesBeforeLongBreak == 0) PomodoroMode.LongBreak else PomodoroMode.ShortBreak
+                        }
+                        PomodoroMode.ShortBreak, PomodoroMode.LongBreak -> PomodoroMode.Work
+                        PomodoroMode.Idle -> PomodoroMode.Work // Should ideally not be idle if skipping
+                    }
+
+                    // Set time for the next state
+                    timeLeftInMillis = when (pomodoroState) {
+                        PomodoroMode.Work -> workDurationMinutes * 60 * 1000L
+                        PomodoroMode.ShortBreak -> shortBreakDurationMinutes * 60 * 1000L
+                        PomodoroMode.LongBreak -> longBreakDurationMinutes * 60 * 1000L
+                        PomodoroMode.Idle -> workDurationMinutes * 60 * 1000L
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+
+    // Settings Dialog
+    if (showSettingsDialog) {
+        PomodoroSettingsDialog(
+            workDuration = workDurationMinutes,
+            shortBreakDuration = shortBreakDurationMinutes,
+            longBreakDuration = longBreakDurationMinutes,
+            onDismiss = { showSettingsDialog = false },
+            onSave = { work, shortBreak, longBreak ->
+                // Only update if timer is not running to avoid disrupting active sessions
+                if (!timerRunning) {
+                    workDurationMinutes = work
+                    shortBreakDurationMinutes = shortBreak
+                    longBreakDurationMinutes = longBreak
+
+                    // Update current timer if in idle state
+                    if (pomodoroState == PomodoroMode.Idle) {
+                        timeLeftInMillis = workDurationMinutes * 60 * 1000L
+                    }
+                }
+                showSettingsDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun PomodoroSettingsDialog(
+    workDuration: Int,
+    shortBreakDuration: Int,
+    longBreakDuration: Int,
+    onDismiss: () -> Unit,
+    onSave: (workMinutes: Int, shortBreakMinutes: Int, longBreakMinutes: Int) -> Unit
+) {
+    var workMinutes by remember { mutableIntStateOf(workDuration) }
+    var shortBreakMinutes by remember { mutableIntStateOf(shortBreakDuration) }
+    var longBreakMinutes by remember { mutableIntStateOf(longBreakDuration) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pomodoro Settings") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Work Duration Slider
+                Column {
+                    Text(
+                        text = "Work Duration: $workMinutes minutes",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = workMinutes.toFloat(),
+                        onValueChange = { workMinutes = it.toInt() },
+                        valueRange = 1f..60f, // Changed from 5f to 1f to allow 1 minute minimum
+                        steps = 59, // (60-1) = 59 steps for 1-minute increments
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // Short Break Duration Slider
+                Column {
+                    Text(
+                        text = "Short Break: $shortBreakMinutes minutes",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = shortBreakMinutes.toFloat(),
+                        onValueChange = { shortBreakMinutes = it.toInt() },
+                        valueRange = 1f..15f,
+                        steps = 14, // (15-1)/1 = 14 steps
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // Long Break Duration Slider
+                Column {
+                    Text(
+                        text = "Long Break: $longBreakMinutes minutes",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = longBreakMinutes.toFloat(),
+                        onValueChange = { longBreakMinutes = it.toInt() },
+                        valueRange = 5f..30f,
+                        steps = 5, // (30-5)/5 = 5 steps
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(workMinutes, shortBreakMinutes, longBreakMinutes) }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// --- Pomodoro Related Composables ---
+
+enum class PomodoroMode {
+    Idle, Work, ShortBreak, LongBreak
+}
+
+@Composable
+fun TaskSelectionChip(
+    task: Task,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .clickable(onClick = onSelect)
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                             else Color.White.copy(alpha = if (task.isTracking) 1f else 0.5f),
+            contentColor = if (isSelected) MaterialTheme.colorScheme.primary
+                           else Color.Black.copy(alpha = if (task.isTracking) 1f else 0.5f)
+        )
+    ) {
+        Text(
+            text = task.name,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+
+@Composable
+fun PomodoroTimerDisplay(
+    timeLeftInMillis: Long,
+    pomodoroState: PomodoroMode,
+    cycleCount: Int,
+    timerRunning: Boolean // Add timerRunning parameter
+) {
+    val minutes = (timeLeftInMillis / 1000 / 60).toInt()
+    val seconds = (timeLeftInMillis / 1000 % 60).toInt()
+    val timeFormatted = String.format("%02d:%02d", minutes, seconds)
+
+    val modeText = when (pomodoroState) {
+        PomodoroMode.Idle -> "" // Return empty string when Idle
+        PomodoroMode.Work -> "Work"
+        PomodoroMode.ShortBreak -> "Short Break"
+        PomodoroMode.LongBreak -> "Long Break"
+    }
+    val modeColor = when (pomodoroState) {
+        PomodoroMode.Work -> DarkRed
+        PomodoroMode.ShortBreak, PomodoroMode.LongBreak -> DarkBlue
+        PomodoroMode.Idle -> Color.Gray // Keep color logic, though text is empty
+    }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Display crowi.gif when idle, time.gif when running, or pause icon when paused
+        Box( // Use a Box to maintain consistent layout height
+            modifier = Modifier
+                .size(220.dp)
+                .padding(bottom = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                // Show crowi.gif when idle
+                pomodoroState == PomodoroMode.Idle -> {
+                    GifImage(
+                        modifier = Modifier.fillMaxSize(),
+                        drawableResId = R.drawable.crowi // Show crowi GIF
+                    )
+                }
+                // Show time.gif when timer is running (and not idle)
+                timerRunning -> {
+                    GifImage(
+                        modifier = Modifier.fillMaxSize(),
+                        drawableResId = R.drawable.time // Show time GIF
+                    )
+                }
+                // Show pause icon when timer is paused (and not idle)
+                else -> {
+                    Icon(
+                        imageVector = Icons.Filled.AccessTime,
+                        contentDescription = "Timer Paused",
+                        tint = DarkBlue, // Use blue color for pause icon
+                        modifier = Modifier.size(130.dp) // Adjust size as needed
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = modeText,
+            style = MaterialTheme.typography.headlineSmall,
+            color = modeColor,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = timeFormatted,
+            fontSize = 72.sp, // Larger font for timer
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+        Text(
+            text = "Cycle ${cycleCount + 1}",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.DarkGray
+        )
+    }
+}
+
+// Add GifImage composable to display the GIF animation
+@Composable
+fun GifImage(
+    modifier: Modifier = Modifier,
+    drawableResId: Int // Add parameter for the drawable resource ID
+) {
+    val context = LocalContext.current
+    val imageLoader = remember {
+        ImageLoader.Builder(context)
+            .components {
+                if (SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
+    AsyncImage(
+        model = ImageRequest.Builder(context)
+            .data(drawableResId) // Use the passed drawableResId
+            .crossfade(true)
+            .build(),
+        contentDescription = "Timer Animation",
+        modifier = modifier.size(180.dp),  // Increased from 120.dp to 180.dp
+        imageLoader = imageLoader,
+        contentScale = ContentScale.Fit
+    )
+}
+
+@Composable
+fun PomodoroControls(
+    timerRunning: Boolean,
+    pomodoroState: PomodoroMode,
+    hasSelectedTask: Boolean,
+    onStartPause: () -> Unit,
+    onReset: () -> Unit,
+    onSkip: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Reset Button
+        TextButton(onClick = onReset, enabled = hasSelectedTask) {
+            Text("Reset", color = if (hasSelectedTask) DarkBlue else Color.Gray)
+        }
+
+        // Start/Pause Button (Large FAB style)
+        FloatingActionButton(
+            onClick = onStartPause,
+            containerColor = if (hasSelectedTask) MaterialTheme.colorScheme.primary else Color.LightGray,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(72.dp) // Make it larger
+        ) {
+            Icon(
+                imageVector = if (timerRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (timerRunning) "Pause Timer" else "Start Timer",
+                modifier = Modifier.size(36.dp) // Larger icon
+            )
+        }
+
+        // Skip Button
+        TextButton(onClick = onSkip, enabled = hasSelectedTask && !timerRunning) { // Enable skip only when paused/idle and task selected
+            Text("Skip", color = if (hasSelectedTask && !timerRunning) DarkBlue else Color.Gray)
+        }
     }
 }
 
@@ -2279,7 +2893,7 @@ fun gregorianToJalali(gregorianYear: Int, gregorianMonth: Int, gregorianDay: Int
         i++
     }
 
-    if (gm > 1 && ((gy % 4 == 0 && gy % 100 != 0) || (gy % 400 == 0)))
+    if (gm > 1 && ((gy % 4 == 0 && gy % 100 != 0)) || (gy % 400 == 0))
         gDayNo++
 
     gDayNo += gd
@@ -2327,6 +2941,9 @@ fun MainScreenPreview() {
             navController = rememberNavController(),
             listNames = dummyLists,
             tasks = dummyTasks,
+            selectedDate = Calendar.getInstance(),
+            onDateSelected = {},
+            isSameDay = { _, _ -> false },
             onAddTask = {},
             onDeleteTask = {},
             onUpdateTask = {}
@@ -2357,49 +2974,5 @@ fun parseTimeToMillis(timeString: String): Long {
         return (hours * 3600 + minutes * 60 + seconds) * 1000
     } catch (e: Exception) {
         return 0L
-    }
-}
-
-// Create a new file for the Pomodoro screen
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PomodoroScreen(navController: NavHostController) {
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = Color.White,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Pomodoro",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Pomodoro Screen Content")
-        }
     }
 }
