@@ -265,7 +265,7 @@ fun StatisticsScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -428,9 +428,9 @@ fun StatisticsScreen(
                     StatRow("${priority.label}:", "$count", priority.color)
                 }
                 if (unfilteredPriorityDistribution.isEmpty() && tasks.isEmpty()) {
-                    Text("No tasks yet.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    Text("No tasks yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else if (unfilteredPriorityDistribution.isEmpty() && tasks.isNotEmpty()) {
-                     Text("No tasks with priorities assigned.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                     Text("No tasks with priorities assigned.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -518,9 +518,9 @@ fun StatisticsScreen(
 
                 // Display time tracking stats using the filtered data
                 if (filteredTimeTrackingTasks.isEmpty() && tasks.any { it.trackedTimeMillis > 0 }) {
-                     Text("No tracked time matches the current filters.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                     Text("No tracked time matches the current filters.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else if (tasks.none { it.trackedTimeMillis > 0 }) {
-                     Text("No time tracked yet.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                     Text("No time tracked yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     StatRow("Total Time Tracked:", totalTimeFormatted)
                     StatRow("Today's Time:", timeTrackedTodayFormatted)
@@ -660,9 +660,9 @@ fun StatisticsScreen(
     if (showFilterDialog) {
         AlertDialog(
             onDismissRequest = { showFilterDialog = false },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Filter Statistics") },
             text = {
                 Column(
@@ -862,7 +862,7 @@ fun StatisticsScreen(
                         Text(
                             "Format: HH:MM:SS (hours:minutes:seconds)",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -901,9 +901,9 @@ fun StatisticsScreen(
     if (showTimeTrackingFilterDialog) {
         AlertDialog(
             onDismissRequest = { showTimeTrackingFilterDialog = false },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Filter Time Tracking") },
             text = {
                 Column(
@@ -1113,7 +1113,7 @@ fun StatCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White) // Or use theme color
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
