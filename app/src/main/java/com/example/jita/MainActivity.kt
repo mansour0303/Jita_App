@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -838,6 +839,11 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    // Add search state
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<Task>>(emptyList()) }
+
     // Update drawer items to include Pomodoro, Statistics, Backup, and Restore
     val drawerItems = listOf(
         AppDestinations.MAIN_SCREEN to "Calendar",
@@ -887,6 +893,19 @@ fun MainScreen(
                 delay(50) // Update 20 times per second for very smooth updates
                 tickerState = System.currentTimeMillis() // Trigger recomposition
             }
+        }
+    }
+
+    // Search function
+    LaunchedEffect(searchQuery, tasks) {
+        if (searchQuery.isNotBlank()) {
+            val query = searchQuery.lowercase()
+            searchResults = tasks.filter { task ->
+                task.name.lowercase().contains(query) || 
+                task.description.lowercase().contains(query)
+            }
+        } else {
+            searchResults = emptyList()
         }
     }
 
@@ -941,30 +960,80 @@ fun MainScreen(
             modifier = Modifier.fillMaxSize(),
             containerColor = Color.White,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = "TIJA",
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            scope.launch { drawerState.open() }
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.Menu,
-                                contentDescription = "Open Navigation Menu"
+                if (showSearch) {
+                    // Search TopAppBar
+                    TopAppBar(
+                        title = {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Search tasks...") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White,
+                                    disabledContainerColor = Color.White,
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent
+                                )
                             )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { 
+                                showSearch = false
+                                searchQuery = ""
+                            }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Close Search"
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        )
                     )
-                )
+                } else {
+                    // Regular TopAppBar
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = "JITA",
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                scope.launch { drawerState.open() }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Menu,
+                                    contentDescription = "Open Navigation Menu"
+                                )
+                            }
+                        },
+                        actions = {
+                            // Add search icon
+                            IconButton(onClick = { showSearch = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search Tasks",
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                }
             },
             floatingActionButton = {
                 FloatingActionButton(
@@ -994,141 +1063,189 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // Pass the selected date and update callback to WeekCalendar
-                WeekCalendar(
-                    selectedDate = selectedDate, // Use passed-in selectedDate
-                    onDateSelected = onDateSelected, // Use passed-in callback
-                    tasks = tasks // Pass all tasks to the calendar
-                )
-
-                // Format the date for the header using "MMMM d"
-                val headerDateFormatter = SimpleDateFormat("MMMM d", Locale.getDefault())
-                val headerText = if (totalTrackedTime > 0) {
-                    "Tasks for ${headerDateFormatter.format(selectedDate.time)} ($formattedTotalTime)"
-                } else {
-                    "Tasks for ${headerDateFormatter.format(selectedDate.time)}"
-                }
-
-                Text(
-                    text = headerText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Blue,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-
-                // Display filtered tasks or empty message
-                if (filteredTasks.isEmpty()) {
-                    Box(
+                // Show search results if search is active and has results
+                if (showSearch && searchQuery.isNotBlank()) {
+                    Text(
+                        text = "Search Results",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Blue,
                         modifier = Modifier
-                            .fillMaxSize() // Fill remaining space
-                            .padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // --- Edit Start ---
-                        // Use a Column to stack the text and the GIF
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    
+                    if (searchResults.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "No tasks for this day. Click + to add a task.",
-                                color = Color.Gray,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(16.dp)) // Add space between text and GIF
-                            // Add the bun.gif using the existing GifImage composable
-                            GifImage(
-                                modifier = Modifier.size(150.dp), // Adjust size as needed
-                                drawableResId = R.drawable.bun // Specify the bun GIF
+                                "No results found for \"$searchQuery\"",
+                                color = Color.Gray
                             )
                         }
-                        // --- Edit End ---
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(searchResults) { task ->
+                                SearchResultItem(
+                                    task = task,
+                                    onClick = {
+                                        // Navigate to the task's date
+                                        onDateSelected(task.dueDate)
+                                        // Close search
+                                        showSearch = false
+                                        searchQuery = ""
+                                    }
+                                )
+                            }
+                        }
                     }
                 } else {
-                    LazyColumn(
+                    // Regular calendar and task view
+                    // Pass the selected date and update callback to WeekCalendar
+                    WeekCalendar(
+                        selectedDate = selectedDate, // Use passed-in selectedDate
+                        onDateSelected = onDateSelected, // Use passed-in callback
+                        tasks = tasks // Pass all tasks to the calendar
+                    )
+
+                    // Format the date for the header using "MMMM d"
+                    val headerDateFormatter = SimpleDateFormat("MMMM d", Locale.getDefault())
+                    val headerText = if (totalTrackedTime > 0) {
+                        "Tasks for ${headerDateFormatter.format(selectedDate.time)} ($formattedTotalTime)"
+                    } else {
+                        "Tasks for ${headerDateFormatter.format(selectedDate.time)}"
+                    }
+
+                    Text(
+                        text = headerText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Blue,
                         modifier = Modifier
-                            .fillMaxSize() // Fill remaining space
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 8.dp) // Add padding at the bottom
-                    ) {
-                        items(filteredTasks, key = { task -> task.id }) { task -> // Use task.id as key
-                            // Get context inside the item scope where it's needed
-                            val context = LocalContext.current
-                            TaskCard(
-                                task = task,
-                                onDeleteClick = {
-                                    // Show confirmation dialog instead of deleting immediately
-                                    taskToDelete = task
-                                    showDeleteConfirmDialog = true
-                                },
-                                onEditClick = {
-                                    // Set the task to edit and show edit dialog
-                                    taskToEdit = task
-                                    // Pre-fill the edit form with task data
-                                    newTaskName = task.name
-                                    newTaskDescription = task.description
-                                    newTaskDate = task.dueDate.clone() as Calendar
-                                    newTaskPriority = task.priority
-                                    newTaskList = task.list
-                                    showEditTaskDialog = true
-                                },
-                                onClick = {
-                                    // Same as onEditClick
-                                    taskToEdit = task
-                                    newTaskName = task.name
-                                    newTaskDescription = task.description
-                                    newTaskDate = task.dueDate.clone() as Calendar
-                                    newTaskPriority = task.priority
-                                    newTaskList = task.list
-                                    showEditTaskDialog = true
-                                },
-                                onTrackingToggle = { isTracking ->
-                                    // Add more detailed logging
-                                    Log.d("MainScreen", "Tracking toggled for task: ${task.name}, isTracking: $isTracking")
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
 
-                                    val updatedTask = if (isTracking) {
-                                        // Start tracking
-                                        task.copy(
-                                            isTracking = true,
-                                            trackingStartTime = System.currentTimeMillis()
-                                        )
-                                    } else {
-                                        // Stop tracking and update total time
-                                        val elapsedTime = System.currentTimeMillis() - task.trackingStartTime
-                                        task.copy(
-                                            isTracking = false,
-                                            trackedTimeMillis = task.trackedTimeMillis + elapsedTime
-                                        )
-                                    }
+                    // Display filtered tasks or empty message
+                    if (filteredTasks.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize() // Fill remaining space
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // --- Edit Start ---
+                            // Use a Column to stack the text and the GIF
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    "No tasks for this day. Click + to add a task.",
+                                    color = Color.Gray,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp)) // Add space between text and GIF
+                                // Add the bun.gif using the existing GifImage composable
+                                GifImage(
+                                    modifier = Modifier.size(150.dp), // Adjust size as needed
+                                    drawableResId = R.drawable.bun // Specify the bun GIF
+                                )
+                            }
+                            // --- Edit End ---
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize() // Fill remaining space
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(bottom = 8.dp) // Add padding at the bottom
+                        ) {
+                            items(filteredTasks, key = { task -> task.id }) { task -> // Use task.id as key
+                                // Get context inside the item scope where it's needed
+                                val context = LocalContext.current
+                                TaskCard(
+                                    task = task,
+                                    onDeleteClick = {
+                                        // Show confirmation dialog instead of deleting immediately
+                                        taskToDelete = task
+                                        showDeleteConfirmDialog = true
+                                    },
+                                    onEditClick = {
+                                        // Set the task to edit and show edit dialog
+                                        taskToEdit = task
+                                        // Pre-fill the edit form with task data
+                                        newTaskName = task.name
+                                        newTaskDescription = task.description
+                                        newTaskDate = task.dueDate.clone() as Calendar
+                                        newTaskPriority = task.priority
+                                        newTaskList = task.list
+                                        showEditTaskDialog = true
+                                    },
+                                    onClick = {
+                                        // Same as onEditClick
+                                        taskToEdit = task
+                                        newTaskName = task.name
+                                        newTaskDescription = task.description
+                                        newTaskDate = task.dueDate.clone() as Calendar
+                                        newTaskPriority = task.priority
+                                        newTaskList = task.list
+                                        showEditTaskDialog = true
+                                    },
+                                    onTrackingToggle = { isTracking ->
+                                        // Add more detailed logging
+                                        Log.d("MainScreen", "Tracking toggled for task: ${task.name}, isTracking: $isTracking")
 
-                                    // Add more logging to verify the updated task
-                                    Log.d("MainScreen", "Updated task: ${updatedTask.name}, isTracking: ${updatedTask.isTracking}, trackedTime: ${updatedTask.trackedTimeMillis}")
+                                        val updatedTask = if (isTracking) {
+                                            // Start tracking
+                                            task.copy(
+                                                isTracking = true,
+                                                trackingStartTime = System.currentTimeMillis()
+                                            )
+                                        } else {
+                                            // Stop tracking and update total time
+                                            val elapsedTime = System.currentTimeMillis() - task.trackingStartTime
+                                            task.copy(
+                                                isTracking = false,
+                                                trackedTimeMillis = task.trackedTimeMillis + elapsedTime
+                                            )
+                                        }
 
-                                    // Call the callback to update the task
-                                    onUpdateTask(updatedTask)
-                                },
-                                onCompletedChange = { isCompleted ->
-                                    // Create updated task with new completed state
-                                    val updatedTask = task.copy(completed = isCompleted)
-                                    // Call the callback to update the task
-                                    onUpdateTask(updatedTask)
+                                        // Add more logging to verify the updated task
+                                        Log.d("MainScreen", "Updated task: ${updatedTask.name}, isTracking: ${updatedTask.isTracking}, trackedTime: ${updatedTask.trackedTimeMillis}")
 
-                                    // --- Additions for completion feedback ---
-                                    if (isCompleted) {
-                                        // Show popup
-                                        completedTaskName = task.name // Store name for popup
-                                        showTaskCompletionPopup = true
-                                        // Show toast using the context obtained within this scope
-                                        Toast.makeText(context, "Nice Job!", Toast.LENGTH_SHORT).show()
-                                    }
-                                    // --- End additions ---
-                                },
-                                currentTimeMillis = tickerState // Pass current time for live updates
-                            )
+                                        // Call the callback to update the task
+                                        onUpdateTask(updatedTask)
+                                    },
+                                    onCompletedChange = { isCompleted ->
+                                        // Create updated task with new completed state
+                                        val updatedTask = task.copy(completed = isCompleted)
+                                        // Call the callback to update the task
+                                        onUpdateTask(updatedTask)
+
+                                        // --- Additions for completion feedback ---
+                                        if (isCompleted) {
+                                            // Show popup
+                                            completedTaskName = task.name // Store name for popup
+                                            showTaskCompletionPopup = true
+                                            // Show toast using the context obtained within this scope
+                                            Toast.makeText(context, "Nice Job!", Toast.LENGTH_SHORT).show()
+                                        }
+                                        // --- End additions ---
+                                    },
+                                    currentTimeMillis = tickerState // Pass current time for live updates
+                                )
+                            }
                         }
                     }
                 }
@@ -2583,26 +2700,10 @@ fun TaskCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Date
-                    Icon(
-                        imageVector = Icons.Filled.DateRange,
-                        contentDescription = "Due Date",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = dateFormatter.format(task.dueDate.time),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-
+                    // Remove date section
+                    
                     // Show list name if available
                     task.list?.let { listName ->
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
                         Text(
                             text = listName,
                             style = MaterialTheme.typography.bodySmall,
@@ -3701,5 +3802,77 @@ fun RestoreScreen(
                 }
             }
         )
+    }
+}
+
+// Add a new composable for search results
+@Composable
+fun SearchResultItem(
+    task: Task,
+    onClick: () -> Unit
+) {
+    val dateFormatter = SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault())
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = task.priority.color.copy(alpha = 0.1f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Priority indicator
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(task.priority.color, CircleShape)
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Task details
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = task.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                
+                if (task.description.isNotBlank()) {
+                    Text(
+                        text = task.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.DarkGray,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                
+                // Show date
+                Text(
+                    text = dateFormatter.format(task.dueDate.time),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+            
+            // Arrow icon
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowRight,
+                contentDescription = "Go to task",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
