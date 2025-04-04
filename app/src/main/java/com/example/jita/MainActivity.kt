@@ -135,6 +135,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
+import android.widget.Toast // Add Toast import
 
 
 // Define navigation routes
@@ -142,6 +143,7 @@ object AppDestinations {
     const val MAIN_SCREEN = "main"
     const val LISTS_SCREEN = "lists"
     const val POMODORO_SCREEN = "pomodoro"
+    const val STATISTICS_SCREEN = "statistics" // Add statistics route
 }
 
 // Define custom colors
@@ -154,8 +156,8 @@ fun <T> SnapshotStateList<T>.move(from: Int, to: Int) {
     if (from == to) return
     // Ensure indices are valid before proceeding
     if (from < 0 || from >= size || to < 0 || to >= size) {
-         println("Warning: Invalid move indices (from: $from, to: $to, size: $size)")
-         return
+        println("Warning: Invalid move indices (from: $from, to: $to, size: $size)")
+        return
     }
     val item = removeAt(from)
     add(to, item)
@@ -233,8 +235,8 @@ class MainActivity : ComponentActivity() {
             // Function to check if two dates are the same day (can be kept here or moved to a util file)
             val isSameDay = { date1: Calendar, date2: Calendar ->
                 date1.get(Calendar.YEAR) == date2.get(Calendar.YEAR) &&
-                date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
-                date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
+                        date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
+                        date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
             }
 
             // --- Callbacks for ListsScreen (Updated for Database) ---
@@ -246,19 +248,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val onEditList = { index: Int, newName: String ->
-                 // Find the original entity based on the index (fragile if list order changes rapidly)
-                 // It's better to pass the original name or ID from the UI if possible
-                 if (newName.isNotBlank() && index >= 0 && index < listNameEntities.size) {
-                     val originalEntity = listNameEntities[index]
-                     if (listNames.none { it.equals(newName, ignoreCase = true) && it != originalEntity.name }) {
-                         scope.launch(Dispatchers.IO) {
-                             // Update the ListNameEntity
-                             listNameDao.updateListName(originalEntity.copy(name = newName))
-                             // Update associated tasks
-                             taskDao.updateTasksListName(originalEntity.name, newName)
-                         }
-                     }
-                 }
+                // Find the original entity based on the index (fragile if list order changes rapidly)
+                // It's better to pass the original name or ID from the UI if possible
+                if (newName.isNotBlank() && index >= 0 && index < listNameEntities.size) {
+                    val originalEntity = listNameEntities[index]
+                    if (listNames.none { it.equals(newName, ignoreCase = true) && it != originalEntity.name }) {
+                        scope.launch(Dispatchers.IO) {
+                            // Update the ListNameEntity
+                            listNameDao.updateListName(originalEntity.copy(name = newName))
+                            // Update associated tasks
+                            taskDao.updateTasksListName(originalEntity.name, newName)
+                        }
+                    }
+                }
             }
             val onDeleteList = { index: Int ->
                 if (index >= 0 && index < listNameEntities.size) {
@@ -274,15 +276,15 @@ class MainActivity : ComponentActivity() {
             // and updating multiple rows in a transaction. For simplicity, this is omitted.
             // The list will revert to alphabetical order on restart.
             val onMoveList = { fromIndex: Int, toIndex: Int ->
-                 // This only affects the current UI state, not the persistent order
-                 listNames.move(fromIndex, toIndex)
-                 // To persist order:
-                 // 1. Add `orderIndex: Int` to ListNameEntity
-                 // 2. Query DAO with `ORDER BY orderIndex ASC`
-                 // 3. Implement a DAO method `updateListOrder(List<ListNameEntity>)`
-                 // 4. In that method, iterate through the reordered list and update `orderIndex`
-                 //    for each entity within a transaction.
-                 println("Warning: List move is temporary and not persisted.")
+                // This only affects the current UI state, not the persistent order
+                listNames.move(fromIndex, toIndex)
+                // To persist order:
+                // 1. Add `orderIndex: Int` to ListNameEntity
+                // 2. Query DAO with `ORDER BY orderIndex ASC`
+                // 3. Implement a DAO method `updateListOrder(List<ListNameEntity>)`
+                // 4. In that method, iterate through the reordered list and update `orderIndex`
+                //    for each entity within a transaction.
+                println("Warning: List move is temporary and not persisted.")
             }
             // --- End Callbacks ---
 
@@ -347,6 +349,17 @@ class MainActivity : ComponentActivity() {
                             onDateSelected = onDateSelected, // Pass date selection callback
                             isSameDay = isSameDay, // Pass date comparison logic
                             onUpdateTask = onUpdateTask // Pass task update callback
+                        )
+                    }
+                    // Add composable for the new Statistics screen
+                    composable(AppDestinations.STATISTICS_SCREEN) {
+                        // Call the StatisticsScreen composable here
+                        StatisticsScreen(
+                            navController = navController,
+                            tasks = tasks // Pass the tasks list
+                            // Remove selectedDate and onDateSelected as they are not used yet
+                            // selectedDate = selectedDate,
+                            // onDateSelected = onDateSelected
                         )
                     }
                 }
@@ -562,13 +575,13 @@ fun ListsScreen(
                                     }
                                 },
                                 onDragCancel = {
-                                     if (index == draggedItemIndex) {
+                                    if (index == draggedItemIndex) {
                                         // Reset drag state on cancel
                                         draggedItemIndex = null
                                         potentialTargetIndex = null
                                         dragOffset = Offset.Zero
                                         dragInitialOffset = Offset.Zero
-                                     }
+                                    }
                                 }
                             )
                         }
@@ -652,7 +665,7 @@ fun ListsScreen(
             textContentColor = Color.Black,
             title = { Text("Edit List Name") },
             text = {
-                 OutlinedTextField(
+                OutlinedTextField(
                     value = editedListName,
                     onValueChange = { editedListName = it },
                     label = { Text("New List Name") },
@@ -680,7 +693,7 @@ fun ListsScreen(
                         // editedListName = "" // Don't clear here, might be needed if dialog reappears quickly
                     },
                     // Disable if blank or name already exists (case-insensitive), excluding original
-                     enabled = editedListName.isNotBlank() && listNames.none { it.equals(editedListName.trim(), ignoreCase = true) && !it.equals(originalName, ignoreCase = true) },
+                    enabled = editedListName.isNotBlank() && listNames.none { it.equals(editedListName.trim(), ignoreCase = true) && !it.equals(originalName, ignoreCase = true) },
                     colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
                 ) { Text("Save") }
             },
@@ -797,11 +810,12 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // Update drawer items to include Pomodoro
+    // Update drawer items to include Pomodoro and Statistics
     val drawerItems = listOf(
         AppDestinations.MAIN_SCREEN to "Calendar",
         AppDestinations.LISTS_SCREEN to "Lists",
-        AppDestinations.POMODORO_SCREEN to "Pomodoro"
+        AppDestinations.POMODORO_SCREEN to "Pomodoro",
+        AppDestinations.STATISTICS_SCREEN to "Statistics" // Add Statistics item
     )
 
     // Local state for the Add Task Dialog form
@@ -821,6 +835,10 @@ fun MainScreen(
     // Add state for edit task dialog
     var showEditTaskDialog by remember { mutableStateOf(false) }
     var taskToEdit by remember { mutableStateOf<Task?>(null) }
+
+    // Add state for the task completion popup
+    var showTaskCompletionPopup by remember { mutableStateOf(false) }
+    var completedTaskName by remember { mutableStateOf<String?>(null) } // To display task name in popup
 
     // Filter tasks for the selected date using the passed-in state and function
     val filteredTasks = remember(tasks, selectedDate) {
@@ -979,11 +997,25 @@ fun MainScreen(
                             .padding(horizontal = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "No tasks for this day. Click + to add a task.",
-                            color = Color.Gray,
-                            textAlign = TextAlign.Center
-                        )
+                        // --- Edit Start ---
+                        // Use a Column to stack the text and the GIF
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                "No tasks for this day. Click + to add a task.",
+                                color = Color.Gray,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp)) // Add space between text and GIF
+                            // Add the bun.gif using the existing GifImage composable
+                            GifImage(
+                                modifier = Modifier.size(150.dp), // Adjust size as needed
+                                drawableResId = R.drawable.bun // Specify the bun GIF
+                            )
+                        }
+                        // --- Edit End ---
                     }
                 } else {
                     LazyColumn(
@@ -994,6 +1026,8 @@ fun MainScreen(
                         contentPadding = PaddingValues(bottom = 8.dp) // Add padding at the bottom
                     ) {
                         items(filteredTasks, key = { task -> task.id }) { task -> // Use task.id as key
+                            // Get context inside the item scope where it's needed
+                            val context = LocalContext.current
                             TaskCard(
                                 task = task,
                                 onDeleteClick = {
@@ -1052,6 +1086,16 @@ fun MainScreen(
                                     val updatedTask = task.copy(completed = isCompleted)
                                     // Call the callback to update the task
                                     onUpdateTask(updatedTask)
+
+                                    // --- Additions for completion feedback ---
+                                    if (isCompleted) {
+                                        // Show popup
+                                        completedTaskName = task.name // Store name for popup
+                                        showTaskCompletionPopup = true
+                                        // Show toast using the context obtained within this scope
+                                        Toast.makeText(context, "Nice Job!", Toast.LENGTH_SHORT).show()
+                                    }
+                                    // --- End additions ---
                                 },
                                 currentTimeMillis = tickerState // Pass current time for live updates
                             )
@@ -1130,7 +1174,7 @@ fun MainScreen(
                             color = DarkBlue
                         )
                         IconButton(onClick = { showDatePicker = true }) {
-                             Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
+                            Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
                         }
                     }
 
@@ -1351,7 +1395,7 @@ fun MainScreen(
                             color = DarkBlue
                         )
                         IconButton(onClick = { showDatePicker = true }) {
-                             Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
+                            Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
                         }
                     }
 
@@ -1585,6 +1629,65 @@ fun MainScreen(
             }
         )
     }
+
+    // --- Add Task Completion Popup ---
+    if (showTaskCompletionPopup) {
+        AlertDialog(
+            onDismissRequest = { showTaskCompletionPopup = false; completedTaskName = null },
+            containerColor = Color.White,
+            title = {
+                Text(
+                    "Well Done!",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkBlue,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    GifImage( // Reuse the GifImage composable
+                        modifier = Modifier.size(200.dp),
+                        drawableResId = R.drawable.nice // Use nice.gif instead of well.gif
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        "You've completed the task!", // Keep this text
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+
+                    // Remove the section displaying the task name
+                    /*
+                    completedTaskName?.let { name ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    */
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showTaskCompletionPopup = false; completedTaskName = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) {
+                    Text("Continue")
+                }
+            }
+        )
+    }
+    // --- End Task Completion Popup ---
 }
 
 // --- Pomodoro Screen ---
@@ -1611,6 +1714,9 @@ fun PomodoroScreen(
 
     var selectedTask by remember { mutableStateOf<Task?>(null) }
 
+    // Add state for completion popup
+    var showCompletionPopup by remember { mutableStateOf(false) }
+
     // --- Calendar Collapse State ---
     var isCalendarExpanded by remember { mutableStateOf(false) } // Changed to false for collapsed by default
 
@@ -1633,24 +1739,42 @@ fun PomodoroScreen(
             // Timer finished
             timerRunning = false
 
-            // If we were in work mode, update the task's tracked time
-            if (pomodoroState == PomodoroMode.Work && selectedTask != null) {
-                val task = selectedTask!!
-                val updatedTask = task.copy(
-                    trackedTimeMillis = task.trackedTimeMillis + (workDurationMinutes * 60 * 1000L)
-                )
-                onUpdateTask(updatedTask)
-                selectedTask = updatedTask
-                cycleCount++ // Increment completed work cycles
-            }
-
-            // Determine next state
+            // Determine next state based on current state
             pomodoroState = when (pomodoroState) {
                 PomodoroMode.Work -> {
-                    if (cycleCount % cyclesBeforeLongBreak == 0) PomodoroMode.LongBreak else PomodoroMode.ShortBreak
+                    // After work session, increment cycle count and update task time
+                    if (selectedTask != null) {
+                        val task = selectedTask!!
+                        val updatedTask = task.copy(
+                            trackedTimeMillis = task.trackedTimeMillis + (workDurationMinutes * 60 * 1000L)
+                        )
+                        onUpdateTask(updatedTask)
+                        selectedTask = updatedTask
+
+                        // Show completion popup after work session
+                        showCompletionPopup = true
+                    }
+
+                    // After work, check if we need a long break
+                    if ((cycleCount + 1) % cyclesBeforeLongBreak == 0) {
+                        // This was the 4th work session, go to long break
+                        PomodoroMode.LongBreak
+                    } else {
+                        // This was work session 1, 2, or 3, go to short break
+                        PomodoroMode.ShortBreak
+                    }
                 }
-                PomodoroMode.ShortBreak, PomodoroMode.LongBreak -> PomodoroMode.Work
-                PomodoroMode.Idle -> PomodoroMode.Work // Should ideally not be idle if timer was running
+                PomodoroMode.ShortBreak -> {
+                    // After short break, go to next work session and increment cycle
+                    cycleCount++
+                    PomodoroMode.Work
+                }
+                PomodoroMode.LongBreak -> {
+                    // After long break, reset to first work session of next set
+                    cycleCount++
+                    PomodoroMode.Work
+                }
+                PomodoroMode.Idle -> PomodoroMode.Work
             }
 
             // Set time for the next state
@@ -1831,31 +1955,43 @@ fun PomodoroScreen(
                 onSkip = {
                     timerRunning = false
 
-                    // If skipping work mode, add partial time to task
-                    if (pomodoroState == PomodoroMode.Work && selectedTask != null) {
-                        val task = selectedTask!!
-                        val elapsedTime = (workDurationMinutes * 60 * 1000L) - timeLeftInMillis
-                        if (elapsedTime > 0) {
-                             // Only update if some time was spent
-                             val updatedTask = task.copy(
-                                 trackedTimeMillis = task.trackedTimeMillis + elapsedTime
-                             )
-                             onUpdateTask(updatedTask)
-                             selectedTask = updatedTask
-                             cycleCount++ // Count the skipped work cycle
-                        } else if (pomodoroState == PomodoroMode.Work) {
-                            // If skipping work immediately, still count the cycle attempt
-                            cycleCount++
-                        }
-                    }
-
-                    // Determine next state (same logic as timer finishing)
+                    // Determine next state based on current state
                     pomodoroState = when (pomodoroState) {
                         PomodoroMode.Work -> {
-                            if (cycleCount % cyclesBeforeLongBreak == 0) PomodoroMode.LongBreak else PomodoroMode.ShortBreak
+                            // If skipping work mode, add partial time to task
+                            if (selectedTask != null) {
+                                val task = selectedTask!!
+                                val elapsedTime = (workDurationMinutes * 60 * 1000L) - timeLeftInMillis
+                                if (elapsedTime > 0) {
+                                    // Only update if some time was spent
+                                    val updatedTask = task.copy(
+                                        trackedTimeMillis = task.trackedTimeMillis + elapsedTime
+                                    )
+                                    onUpdateTask(updatedTask)
+                                    selectedTask = updatedTask
+                                }
+                            }
+
+                            // After work, check if we need a long break
+                            if ((cycleCount + 1) % cyclesBeforeLongBreak == 0) {
+                                // This was the 4th work session, go to long break
+                                PomodoroMode.LongBreak
+                            } else {
+                                // This was work session 1, 2, or 3, go to short break
+                                PomodoroMode.ShortBreak
+                            }
                         }
-                        PomodoroMode.ShortBreak, PomodoroMode.LongBreak -> PomodoroMode.Work
-                        PomodoroMode.Idle -> PomodoroMode.Work // Should ideally not be idle if skipping
+                        PomodoroMode.ShortBreak -> {
+                            // After short break, go to next work session and increment cycle
+                            cycleCount++
+                            PomodoroMode.Work
+                        }
+                        PomodoroMode.LongBreak -> {
+                            // After long break, reset to first work session of next set
+                            cycleCount++
+                            PomodoroMode.Work
+                        }
+                        PomodoroMode.Idle -> PomodoroMode.Work
                     }
 
                     // Set time for the next state
@@ -1892,6 +2028,60 @@ fun PomodoroScreen(
                     }
                 }
                 showSettingsDialog = false
+            }
+        )
+    }
+
+    // Completion Popup
+    if (showCompletionPopup) {
+        AlertDialog(
+            onDismissRequest = { showCompletionPopup = false },
+            containerColor = Color.White,
+            title = {
+                Text(
+                    "Well Done!",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkBlue,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    GifImage(
+                        modifier = Modifier.size(200.dp),
+                        drawableResId = R.drawable.well // Use well.gif
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        "You've completed a work session!",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+
+                    selectedTask?.let { task ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Task: ${task.name}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showCompletionPopup = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                ) {
+                    Text("Continue")
+                }
             }
         )
     }
@@ -2005,9 +2195,9 @@ fun TaskSelectionChip(
         ),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                             else Color.White.copy(alpha = if (task.isTracking) 1f else 0.5f),
+            else Color.White.copy(alpha = if (task.isTracking) 1f else 0.5f),
             contentColor = if (isSelected) MaterialTheme.colorScheme.primary
-                           else Color.Black.copy(alpha = if (task.isTracking) 1f else 0.5f)
+            else Color.Black.copy(alpha = if (task.isTracking) 1f else 0.5f)
         )
     ) {
         Text(
@@ -2149,21 +2339,38 @@ fun PomodoroControls(
         }
 
         // Start/Pause Button (Large FAB style)
-        FloatingActionButton(
-            onClick = onStartPause,
-            containerColor = if (hasSelectedTask) MaterialTheme.colorScheme.primary else Color.LightGray,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(72.dp) // Make it larger
-        ) {
-            Icon(
-                imageVector = if (timerRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (timerRunning) "Pause Timer" else "Start Timer",
-                modifier = Modifier.size(36.dp) // Larger icon
-            )
+        if (hasSelectedTask) {
+            FloatingActionButton(
+                onClick = onStartPause,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(72.dp) // Make it larger
+            ) {
+                Icon(
+                    imageVector = if (timerRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (timerRunning) "Pause Timer" else "Start Timer",
+                    modifier = Modifier.size(36.dp) // Larger icon
+                )
+            }
+        } else {
+            // Disabled version (gray button that doesn't respond to clicks)
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(Color.LightGray, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Start Timer (Disabled)",
+                    tint = Color.White,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
         }
 
         // Skip Button
-        TextButton(onClick = onSkip, enabled = hasSelectedTask && !timerRunning) { // Enable skip only when paused/idle and task selected
+        TextButton(onClick = onSkip, enabled = hasSelectedTask && !timerRunning) {
             Text("Skip", color = if (hasSelectedTask && !timerRunning) DarkBlue else Color.Gray)
         }
     }
@@ -2585,8 +2792,8 @@ fun WeekCalendar(
     val hasTasksOnDate = { date: Calendar ->
         tasks.any { task ->
             date.get(Calendar.YEAR) == task.dueDate.get(Calendar.YEAR) &&
-            date.get(Calendar.MONTH) == task.dueDate.get(Calendar.MONTH) &&
-            date.get(Calendar.DAY_OF_MONTH) == task.dueDate.get(Calendar.DAY_OF_MONTH)
+                    date.get(Calendar.MONTH) == task.dueDate.get(Calendar.MONTH) &&
+                    date.get(Calendar.DAY_OF_MONTH) == task.dueDate.get(Calendar.DAY_OF_MONTH)
         }
     }
 
@@ -2807,7 +3014,7 @@ fun MonthYearPickerDialog(
                     }
                     Text(selectedYear.toString(), fontWeight = FontWeight.Bold, color = Color.Black)
                     IconButton(onClick = {
-                         if (selectedYear < yearRange.last) selectedYear++
+                        if (selectedYear < yearRange.last) selectedYear++
                     }, enabled = selectedYear < yearRange.last) {
                         Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next Year", tint = Color.Black)
                     }
@@ -2819,7 +3026,7 @@ fun MonthYearPickerDialog(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     items(monthNames.size -1) { monthIndex ->
-                         if (monthNames[monthIndex].isNotEmpty()) {
+                        if (monthNames[monthIndex].isNotEmpty()) {
                             val isSelected = monthIndex == selectedMonth
                             TextButton(
                                 onClick = { selectedMonth = monthIndex },
