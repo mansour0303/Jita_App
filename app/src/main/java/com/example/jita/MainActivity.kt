@@ -3315,13 +3315,8 @@ fun BackupScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header
-            Text(
-                text = "Backup Your Data",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // Add space between app bar and description text
+            Spacer(modifier = Modifier.height(16.dp))
             
             // Description
             Text(
@@ -3417,10 +3412,13 @@ fun BackupScreen(
                 )
             }
             
-            // GIF image
+            // Add more space between button and GIF
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // GIF image - Replace bun with rab
             GifImage(
-                modifier = Modifier.size(200.dp),
-                drawableResId = R.drawable.bun
+                modifier = Modifier.size(160.dp),  // Reduced from 200.dp to 160.dp
+                drawableResId = R.drawable.rab
             )
         }
     }
@@ -3583,13 +3581,8 @@ fun RestoreScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header
-            Text(
-                text = "Restore Your Data",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // Remove the header text and add some space instead
+            Spacer(modifier = Modifier.height(16.dp))
             
             // Description
             Text(
@@ -3659,10 +3652,13 @@ fun RestoreScreen(
                 )
             }
             
+            // Add extra space between button and GIF
+            Spacer(modifier = Modifier.height(16.dp))
+            
             // GIF image
             GifImage(
                 modifier = Modifier.size(200.dp),
-                drawableResId = R.drawable.crowi // Use a different GIF for restore
+                drawableResId = R.drawable.cat // Changed from crowi to cat
             )
         }
     }
