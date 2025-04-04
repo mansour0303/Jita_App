@@ -33,4 +33,7 @@ interface ListNameDao {
     suspend fun getListByName(name: String): ListNameEntity?
 
     // If persisting order, you'd need methods to update orderIndex
+
+    @Query("DELETE FROM list_names")
+    suspend fun deleteAllListNames()
 } 

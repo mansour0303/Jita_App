@@ -144,6 +144,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Date
+import com.example.jita.data.ListNameDao
+import com.example.jita.data.TaskDao
 
 
 // Define navigation routes
@@ -153,6 +155,7 @@ object AppDestinations {
     const val POMODORO_SCREEN = "pomodoro"
     const val STATISTICS_SCREEN = "statistics" // Add statistics route
     const val BACKUP_SCREEN = "backup" // Add backup route
+    const val RESTORE_SCREEN = "restore" // Add restore route
 }
 
 // Define custom colors
@@ -377,6 +380,14 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             listNameEntities = listNameEntities,
                             tasks = tasks
+                        )
+                    }
+                    // Add composable for the Restore screen
+                    composable(AppDestinations.RESTORE_SCREEN) {
+                        RestoreScreen(
+                            navController = navController,
+                            listNameDao = listNameDao,
+                            taskDao = taskDao
                         )
                     }
                 }
@@ -827,13 +838,14 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // Update drawer items to include Pomodoro, Statistics, and Backup
+    // Update drawer items to include Pomodoro, Statistics, Backup, and Restore
     val drawerItems = listOf(
         AppDestinations.MAIN_SCREEN to "Calendar",
         AppDestinations.LISTS_SCREEN to "Lists",
         AppDestinations.POMODORO_SCREEN to "Pomodoro",
         AppDestinations.STATISTICS_SCREEN to "Statistics",
-        AppDestinations.BACKUP_SCREEN to "Backup" // Add Backup item
+        AppDestinations.BACKUP_SCREEN to "Backup",
+        AppDestinations.RESTORE_SCREEN to "Restore" // Add Restore item
     )
 
     // Local state for the Add Task Dialog form
@@ -3421,6 +3433,274 @@ fun BackupScreen(
             text = { Text(exportMessage!!) },
             confirmButton = {
                 TextButton(onClick = { showExportDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+}
+
+// Add the RestoreScreen composable
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RestoreScreen(
+    navController: NavHostController,
+    listNameDao: ListNameDao,
+    taskDao: TaskDao
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    var isImporting by remember { mutableStateOf(false) }
+    var importMessage by remember { mutableStateOf<String?>(null) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importStats by remember { mutableStateOf(Triple(0, 0, 0)) } // lists, tasks, completed tasks
+    
+    // Create launcher for document selection
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            isImporting = true
+            importMessage = null
+            
+            try {
+                // Read the JSON file
+                val jsonString = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.bufferedReader().use { it.readText() }
+                } ?: throw Exception("Could not read file")
+                
+                val jsonObject = JSONObject(jsonString)
+                
+                // Parse lists
+                val listsArray = jsonObject.getJSONArray("lists")
+                val listEntities = mutableListOf<ListNameEntity>()
+                for (i in 0 until listsArray.length()) {
+                    val listObj = listsArray.getJSONObject(i)
+                    listEntities.add(
+                        ListNameEntity(
+                            id = if (listObj.has("id")) listObj.getInt("id") else 0,
+                            name = listObj.getString("name")
+                        )
+                    )
+                }
+                
+                // Parse tasks
+                val tasksArray = jsonObject.getJSONArray("tasks")
+                val taskEntities = mutableListOf<TaskEntity>()
+                var completedTaskCount = 0
+                
+                for (i in 0 until tasksArray.length()) {
+                    val taskObj = tasksArray.getJSONObject(i)
+                    val list = if (taskObj.has("list") && !taskObj.isNull("list")) 
+                        taskObj.getString("list") else null
+                    
+                    val isCompleted = if (taskObj.has("completed")) 
+                        taskObj.getBoolean("completed") else false
+                    
+                    if (isCompleted) completedTaskCount++
+                    
+                    taskEntities.add(
+                        TaskEntity(
+                            id = if (taskObj.has("id")) taskObj.getInt("id") else 0,
+                            name = taskObj.getString("name"),
+                            description = taskObj.getString("description"),
+                            dueDate = taskObj.getLong("dueDate"),
+                            priority = taskObj.getString("priority"),
+                            list = list,
+                            trackedTimeMillis = taskObj.getLong("trackedTimeMillis"),
+                            isTracking = taskObj.getBoolean("isTracking"),
+                            trackingStartTime = taskObj.getLong("trackingStartTime"),
+                            completed = isCompleted
+                        )
+                    )
+                }
+                
+                // Store import stats before database operations
+                importStats = Triple(listEntities.size, taskEntities.size, completedTaskCount)
+                
+                // Insert into database
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        // Clear existing data
+                        taskDao.deleteAllTasks()
+                        listNameDao.deleteAllListNames()
+                        
+                        // Insert new data
+                        listEntities.forEach { listNameDao.insertListName(it) }
+                        taskEntities.forEach { taskDao.insertTask(it) }
+                        
+                        importMessage = "Data restored successfully!"
+                    } catch (e: Exception) {
+                        Log.e("RestoreScreen", "Database error", e)
+                        importMessage = "Database error: ${e.localizedMessage}"
+                    } finally {
+                        isImporting = false
+                        showImportDialog = true
+                    }
+                }
+                
+            } catch (e: Exception) {
+                Log.e("RestoreScreen", "Error importing data", e)
+                importMessage = "Error: ${e.localizedMessage}"
+                isImporting = false
+                showImportDialog = true
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Restore Data",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Text(
+                text = "Restore Your Data",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            
+            // Description
+            Text(
+                text = "Restore your lists and tasks from a previously created backup file. This will replace all current data with the data from the backup file.",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Warning Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = DarkRed.copy(alpha = 0.1f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Warning",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = DarkRed
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "Restoring data will replace all your current lists and tasks. This action cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = Color.Black
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Import button
+            Button(
+                onClick = {
+                    openDocumentLauncher.launch(arrayOf("application/json"))
+                },
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                ),
+                enabled = !isImporting
+            ) {
+                if (isImporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = if (isImporting) "Importing..." else "Select Backup File",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            
+            // GIF image
+            GifImage(
+                modifier = Modifier.size(200.dp),
+                drawableResId = R.drawable.crowi // Use a different GIF for restore
+            )
+        }
+    }
+    
+    // Result dialog
+    if (showImportDialog && importMessage != null) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text("Restore Result") },
+            text = { 
+                Column {
+                    Text(importMessage!!)
+                    
+                    if (importMessage!!.startsWith("Data restored")) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Restored data summary:", fontWeight = FontWeight.Bold)
+                        Text("Lists: ${importStats.first}")
+                        Text("Tasks: ${importStats.second}")
+                        Text("Completed tasks: ${importStats.third}")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { 
+                        showImportDialog = false
+                        // Navigate back to main screen if successful
+                        if (importMessage!!.startsWith("Data restored")) {
+                            navController.navigate(AppDestinations.MAIN_SCREEN) {
+                                popUpTo(navController.graph.startDestinationId) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                ) {
                     Text("OK")
                 }
             }

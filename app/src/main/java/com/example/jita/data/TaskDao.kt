@@ -43,4 +43,8 @@ interface TaskDao {
     // Query for tasks where list is NULL
     @Query("SELECT * FROM tasks WHERE list IS NULL ORDER BY priority ASC, name ASC")
     fun getTasksWithNullList(): Flow<List<TaskEntity>>
+
+    // Add this method to your TaskDao interface
+    @Query("DELETE FROM tasks")
+    suspend fun deleteAllTasks()
 } 
