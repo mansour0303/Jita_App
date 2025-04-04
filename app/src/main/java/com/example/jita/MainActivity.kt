@@ -159,11 +159,6 @@ object AppDestinations {
     const val RESTORE_SCREEN = "restore" // Add restore route
 }
 
-// Define custom colors
-val DarkBlue = Color(0xFF00008B) // Example Dark Blue
-val DarkRed = Color(0xFFB00020)  // Example Dark Red (similar to Material error)
-val LightBlue = Color(0xFFBEDCE8) // Example Light Blue
-
 // Extension function to move items within a SnapshotStateList
 fun <T> SnapshotStateList<T>.move(from: Int, to: Int) {
     if (from == to) return
@@ -429,7 +424,7 @@ fun ListsScreen(
     val density = LocalDensity.current
 
     Scaffold(
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -641,9 +636,9 @@ fun ListsScreen(
     if (showAddListDialog) {
         AlertDialog(
             onDismissRequest = { showAddListDialog = false; newListName = "" },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Create New List") },
             text = {
                 OutlinedTextField(
@@ -653,10 +648,13 @@ fun ListsScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.Black, unfocusedTextColor = Color.Black,
-                        focusedLabelColor = DarkBlue, unfocusedLabelColor = Color.Gray,
-                        focusedBorderColor = DarkBlue, unfocusedBorderColor = Color.Gray,
-                        cursorColor = DarkBlue
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface, 
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary, 
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary, 
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        cursorColor = MaterialTheme.colorScheme.primary
                     ),
                     // Add check for existing names (case-insensitive)
                     isError = listNames.any { it.equals(newListName.trim(), ignoreCase = true) }
@@ -672,13 +670,13 @@ fun ListsScreen(
                     },
                     // Disable if blank or name already exists (case-insensitive)
                     enabled = newListName.isNotBlank() && listNames.none { it.equals(newListName.trim(), ignoreCase = true) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Add") }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showAddListDialog = false; newListName = "" },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
             }
         )
@@ -689,9 +687,9 @@ fun ListsScreen(
         val originalName = listNames.getOrNull(listToEditIndex!!) ?: ""
         AlertDialog(
             onDismissRequest = { showEditDialog = false; listToEditIndex = null },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Edit List Name") },
             text = {
                 OutlinedTextField(
@@ -701,10 +699,13 @@ fun ListsScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.Black, unfocusedTextColor = Color.Black,
-                        focusedLabelColor = DarkBlue, unfocusedLabelColor = Color.Gray,
-                        focusedBorderColor = DarkBlue, unfocusedBorderColor = Color.Gray,
-                        cursorColor = DarkBlue
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface, 
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary, 
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary, 
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        cursorColor = MaterialTheme.colorScheme.primary
                     ),
                     // Add check for existing names (case-insensitive), excluding the original name
                     isError = listNames.any { it.equals(editedListName.trim(), ignoreCase = true) && !it.equals(originalName, ignoreCase = true) }
@@ -723,13 +724,13 @@ fun ListsScreen(
                     },
                     // Disable if blank or name already exists (case-insensitive), excluding original
                     enabled = editedListName.isNotBlank() && listNames.none { it.equals(editedListName.trim(), ignoreCase = true) && !it.equals(originalName, ignoreCase = true) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Save") }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showEditDialog = false; listToEditIndex = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
             }
         )
@@ -739,9 +740,9 @@ fun ListsScreen(
     if (showDeleteConfirmDialog && listToDeleteIndex != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false; listToDeleteIndex = null },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Confirm Deletion") },
             text = { Text("Are you sure you want to delete the list '${listNames.getOrNull(listToDeleteIndex!!)}'? This will also delete all tasks associated with this list.") }, // Updated warning
             confirmButton = {
@@ -753,13 +754,13 @@ fun ListsScreen(
                         showDeleteConfirmDialog = false
                         listToDeleteIndex = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkRed)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showDeleteConfirmDialog = false; listToDeleteIndex = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
             }
         )
@@ -779,7 +780,10 @@ fun ListCard(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 1.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isDragging) LightBlue.copy(alpha = 0.9f) else LightBlue
+            containerColor = if (isDragging) 
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f) 
+            else 
+                MaterialTheme.colorScheme.primaryContainer
         )
     ) {
         Row(
@@ -793,13 +797,13 @@ fun ListCard(
                 Text(
                     text = listName,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.Black
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 // Add task count text
                 Text(
                     text = "$taskCount task${if (taskCount != 1) "s" else ""}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.DarkGray
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -807,14 +811,14 @@ fun ListCard(
                 Icon(
                     imageVector = Icons.Filled.Edit,
                     contentDescription = "Edit List",
-                    tint = DarkBlue
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
             IconButton(onClick = onDeleteClick, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = "Delete List",
-                    tint = DarkRed
+                    tint = MaterialTheme.colorScheme.error
                 )
             }
         }
@@ -927,7 +931,7 @@ fun MainScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = Color.White) {
+            ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 Spacer(Modifier.height(12.dp))
                 drawerItems.forEach { (route, label) ->
                     NavigationDrawerItem(
@@ -947,7 +951,7 @@ fun MainScreen(
                             }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
-                            unselectedTextColor = Color.Black,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurface,
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
@@ -958,7 +962,7 @@ fun MainScreen(
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 if (showSearch) {
                     // Search TopAppBar
@@ -971,11 +975,11 @@ fun MainScreen(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White,
-                                    disabledContainerColor = Color.White,
-                                    focusedBorderColor = Color.Transparent,
-                                    unfocusedBorderColor = Color.Transparent
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    disabledContainerColor = MaterialTheme.colorScheme.surface,
+                                    focusedBorderColor = MaterialTheme.colorScheme.outline,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
                                 )
                             )
                         },
@@ -1069,7 +1073,7 @@ fun MainScreen(
                         text = "Search Results",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Blue,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -1084,7 +1088,7 @@ fun MainScreen(
                         ) {
                             Text(
                                 "No results found for \"$searchQuery\"",
-                                color = Color.Gray
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                         }
                     } else {
@@ -1129,7 +1133,7 @@ fun MainScreen(
                         text = headerText,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Blue,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -1151,7 +1155,7 @@ fun MainScreen(
                             ) {
                                 Text(
                                     "No tasks for this day. Click + to add a task.",
-                                    color = Color.Gray,
+                                    color = MaterialTheme.colorScheme.onBackground,
                                     textAlign = TextAlign.Center
                                 )
                                 Spacer(modifier = Modifier.height(16.dp)) // Add space between text and GIF
@@ -1257,9 +1261,9 @@ fun MainScreen(
     if (showAddTaskDialog) {
         AlertDialog(
             onDismissRequest = { showAddTaskDialog = false },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Create New Task") },
             text = {
                 Column(
@@ -1274,13 +1278,13 @@ fun MainScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.Black,
-                            unfocusedTextColor = Color.Black,
-                            focusedLabelColor = DarkBlue,
-                            unfocusedLabelColor = Color.Gray,
-                            focusedBorderColor = DarkBlue,
-                            unfocusedBorderColor = Color.Gray,
-                            cursorColor = DarkBlue
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface, 
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
 
@@ -1293,13 +1297,13 @@ fun MainScreen(
                         minLines = 2,
                         maxLines = 4,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.Black,
-                            unfocusedTextColor = Color.Black,
-                            focusedLabelColor = DarkBlue,
-                            unfocusedLabelColor = Color.Gray,
-                            focusedBorderColor = DarkBlue,
-                            unfocusedBorderColor = Color.Gray,
-                            cursorColor = DarkBlue
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface, 
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
 
@@ -1309,24 +1313,24 @@ fun MainScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Date: ", color = Color.Black)
+                        Text("Date: ", color = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = dateFormatter.format(newTaskDate.time),
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable { showDatePicker = true }
-                                .border(BorderStroke(1.dp, Color.Gray), RoundedCornerShape(4.dp)) // Add border
+                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(4.dp)) // Add border
                                 .padding(vertical = 8.dp, horizontal = 12.dp), // Add padding
-                            color = DarkBlue
+                            color = MaterialTheme.colorScheme.primary
                         )
                         IconButton(onClick = { showDatePicker = true }) {
-                            Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
+                            Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
 
                     // Priority Selection
-                    Text("Priority:", color = Color.Black)
+                    Text("Priority:", color = MaterialTheme.colorScheme.onSurface)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -1354,7 +1358,7 @@ fun MainScreen(
                     }
 
                     // List Selection Dropdown
-                    Text("List:", color = Color.Black)
+                    Text("List:", color = MaterialTheme.colorScheme.onSurface)
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = newTaskList ?: "None", // Display selected list or "None"
@@ -1376,18 +1380,18 @@ fun MainScreen(
                                 .fillMaxWidth()
                                 .clickable { isListDropdownExpanded = true }, // Open dropdown on click
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.Black,
-                                unfocusedTextColor = Color.Black,
-                                focusedLabelColor = DarkBlue,
-                                unfocusedLabelColor = Color.Gray,
-                                focusedBorderColor = DarkBlue,
-                                unfocusedBorderColor = Color.Gray,
-                                cursorColor = DarkBlue,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                cursorColor = MaterialTheme.colorScheme.primary,
                                 // Make it look read-only
-                                disabledTextColor = Color.Black,
-                                disabledBorderColor = Color.Gray,
-                                disabledLabelColor = Color.Gray,
-                                disabledTrailingIconColor = DarkBlue
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.primary
                             ),
                             enabled = false // Disable direct text input
                         )
@@ -1412,7 +1416,7 @@ fun MainScreen(
                                     text = {
                                         Text(
                                             "No lists available. Create lists first.",
-                                            color = Color.Gray,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             fontSize = 14.sp
                                         )
                                     },
@@ -1453,13 +1457,13 @@ fun MainScreen(
                         }
                     },
                     enabled = newTaskName.isNotBlank(), // Basic validation
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Add") }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showAddTaskDialog = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
             }
         )
@@ -1478,9 +1482,9 @@ fun MainScreen(
                 showEditTaskDialog = false
                 taskToEdit = null
             },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Edit Task") },
             text = {
                 Column(
@@ -1495,13 +1499,13 @@ fun MainScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.Black,
-                            unfocusedTextColor = Color.Black,
-                            focusedLabelColor = DarkBlue,
-                            unfocusedLabelColor = Color.Gray,
-                            focusedBorderColor = DarkBlue,
-                            unfocusedBorderColor = Color.Gray,
-                            cursorColor = DarkBlue
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface, 
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
 
@@ -1514,13 +1518,13 @@ fun MainScreen(
                         minLines = 2,
                         maxLines = 4,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.Black,
-                            unfocusedTextColor = Color.Black,
-                            focusedLabelColor = DarkBlue,
-                            unfocusedLabelColor = Color.Gray,
-                            focusedBorderColor = DarkBlue,
-                            unfocusedBorderColor = Color.Gray,
-                            cursorColor = DarkBlue
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface, 
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
 
@@ -1530,24 +1534,24 @@ fun MainScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Date: ", color = Color.Black)
+                        Text("Date: ", color = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = dateFormatter.format(newTaskDate.time),
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable { showDatePicker = true }
-                                .border(BorderStroke(1.dp, Color.Gray), RoundedCornerShape(4.dp)) // Add border
+                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(4.dp)) // Add border
                                 .padding(vertical = 8.dp, horizontal = 12.dp), // Add padding
-                            color = DarkBlue
+                            color = MaterialTheme.colorScheme.primary
                         )
                         IconButton(onClick = { showDatePicker = true }) {
-                            Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = DarkBlue)
+                            Icon(Icons.Default.DateRange, contentDescription = "Select Date", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
 
                     // Priority Selection
-                    Text("Priority:", color = Color.Black)
+                    Text("Priority:", color = MaterialTheme.colorScheme.onSurface)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -1575,7 +1579,7 @@ fun MainScreen(
                     }
 
                     // List Selection Dropdown
-                    Text("List:", color = Color.Black)
+                    Text("List:", color = MaterialTheme.colorScheme.onSurface)
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = newTaskList ?: "None", // Display selected list or "None"
@@ -1597,18 +1601,18 @@ fun MainScreen(
                                 .fillMaxWidth()
                                 .clickable { isListDropdownExpanded = true }, // Open dropdown on click
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.Black,
-                                unfocusedTextColor = Color.Black,
-                                focusedLabelColor = DarkBlue,
-                                unfocusedLabelColor = Color.Gray,
-                                focusedBorderColor = DarkBlue,
-                                unfocusedBorderColor = Color.Gray,
-                                cursorColor = DarkBlue,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                cursorColor = MaterialTheme.colorScheme.primary,
                                 // Make it look read-only
-                                disabledTextColor = Color.Black,
-                                disabledBorderColor = Color.Gray,
-                                disabledLabelColor = Color.Gray,
-                                disabledTrailingIconColor = DarkBlue
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.primary
                             ),
                             enabled = false // Disable direct text input
                         )
@@ -1633,7 +1637,7 @@ fun MainScreen(
                                     text = {
                                         Text(
                                             "No lists available. Create lists first.",
-                                            color = Color.Gray,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             fontSize = 14.sp
                                         )
                                     },
@@ -1655,7 +1659,7 @@ fun MainScreen(
                     }
 
                     // After list selection dropdown, add time editor
-                    Text("Tracked Time:", color = Color.Black)
+                    Text("Tracked Time:", color = MaterialTheme.colorScheme.onSurface)
                     OutlinedTextField(
                         value = editedTimeString,
                         onValueChange = { input ->
@@ -1673,13 +1677,13 @@ fun MainScreen(
                         isError = timeError != null,
                         supportingText = { timeError?.let { Text(it) } },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.Black,
-                            unfocusedTextColor = Color.Black,
-                            focusedLabelColor = DarkBlue,
-                            unfocusedLabelColor = Color.Gray,
-                            focusedBorderColor = DarkBlue,
-                            unfocusedBorderColor = Color.Gray,
-                            cursorColor = DarkBlue
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface, 
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary, 
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
                 }
@@ -1713,7 +1717,7 @@ fun MainScreen(
                         }
                     },
                     enabled = newTaskName.isNotBlank() && timeError == null,
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Save") }
             },
             dismissButton = {
@@ -1722,7 +1726,7 @@ fun MainScreen(
                         showEditTaskDialog = false
                         taskToEdit = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
             }
         )
@@ -1735,9 +1739,9 @@ fun MainScreen(
                 showDeleteConfirmDialog = false
                 taskToDelete = null
             },
-            containerColor = Color.White,
-            titleContentColor = Color.Black,
-            textContentColor = Color.Black,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Confirm Deletion") },
             text = { Text("Are you sure you want to delete the task '${taskToDelete?.name}'?") },
             confirmButton = {
@@ -1749,7 +1753,7 @@ fun MainScreen(
                         showDeleteConfirmDialog = false
                         taskToDelete = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkRed)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
             },
             dismissButton = {
@@ -1758,7 +1762,7 @@ fun MainScreen(
                         showDeleteConfirmDialog = false
                         taskToDelete = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
             }
         )
@@ -1781,13 +1785,13 @@ fun MainScreen(
     if (showTaskCompletionPopup) {
         AlertDialog(
             onDismissRequest = { showTaskCompletionPopup = false; completedTaskName = null },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
             title = {
                 Text(
                     "Well Done!",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color = DarkBlue,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -1827,7 +1831,7 @@ fun MainScreen(
             confirmButton = {
                 TextButton(
                     onClick = { showTaskCompletionPopup = false; completedTaskName = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Continue")
                 }
@@ -2062,7 +2066,7 @@ fun PomodoroScreen(
                         Text(
                             text = "No tasks for this date",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 }
@@ -2183,13 +2187,13 @@ fun PomodoroScreen(
     if (showCompletionPopup) {
         AlertDialog(
             onDismissRequest = { showCompletionPopup = false },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
             title = {
                 Text(
                     "Well Done!",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color = DarkBlue,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -2225,7 +2229,7 @@ fun PomodoroScreen(
             confirmButton = {
                 TextButton(
                     onClick = { showCompletionPopup = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Continue")
                 }
@@ -2375,8 +2379,8 @@ fun PomodoroTimerDisplay(
         PomodoroMode.LongBreak -> "Long Break"
     }
     val modeColor = when (pomodoroState) {
-        PomodoroMode.Work -> DarkRed
-        PomodoroMode.ShortBreak, PomodoroMode.LongBreak -> DarkBlue
+        PomodoroMode.Work -> MaterialTheme.colorScheme.error
+        PomodoroMode.ShortBreak, PomodoroMode.LongBreak -> MaterialTheme.colorScheme.primary
         PomodoroMode.Idle -> Color.Gray // Keep color logic, though text is empty
     }
 
@@ -2408,7 +2412,7 @@ fun PomodoroTimerDisplay(
                     Icon(
                         imageVector = Icons.Filled.AccessTime,
                         contentDescription = "Timer Paused",
-                        tint = DarkBlue, // Use blue color for pause icon
+                        tint = MaterialTheme.colorScheme.primary, // Use primary color for pause icon
                         modifier = Modifier.size(130.dp) // Adjust size as needed
                     )
                 }
@@ -2425,12 +2429,12 @@ fun PomodoroTimerDisplay(
             text = timeFormatted,
             fontSize = 72.sp, // Larger font for timer
             fontWeight = FontWeight.Bold,
-            color = Color.Black
+            color = MaterialTheme.colorScheme.onBackground
         )
         Text(
             text = "Cycle ${cycleCount + 1}",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.DarkGray
+            color = MaterialTheme.colorScheme.onBackground
         )
     }
 }
@@ -2482,7 +2486,7 @@ fun PomodoroControls(
     ) {
         // Reset Button
         TextButton(onClick = onReset, enabled = hasSelectedTask) {
-            Text("Reset", color = if (hasSelectedTask) DarkBlue else Color.Gray)
+            Text("Reset", color = if (hasSelectedTask) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground)
         }
 
         // Start/Pause Button (Large FAB style)
@@ -2504,13 +2508,13 @@ fun PomodoroControls(
             Box(
                 modifier = Modifier
                     .size(72.dp)
-                    .background(Color.LightGray, CircleShape),
+                    .background(MaterialTheme.colorScheme.onBackground, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = "Start Timer (Disabled)",
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.background,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -2518,7 +2522,7 @@ fun PomodoroControls(
 
         // Skip Button
         TextButton(onClick = onSkip, enabled = hasSelectedTask && !timerRunning) {
-            Text("Skip", color = if (hasSelectedTask && !timerRunning) DarkBlue else Color.Gray)
+            Text("Skip", color = if (hasSelectedTask && !timerRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground)
         }
     }
 }
@@ -2541,7 +2545,7 @@ data class Task(
 enum class TaskPriority(val color: Color, val label: String) {
     HIGH(Color.Red, "High"),
     MEDIUM(Color(0xFFFF9800), "Medium"),  // Orange
-    LOW(DarkBlue, "Low"),
+    LOW(Color.Blue, "Low"),
     VERY_LOW(Color.Gray, "Very Low")
 }
 
@@ -2578,7 +2582,7 @@ fun PriorityOption(
         Text(
             text = priority.label,
             fontSize = 12.sp,
-            color = if (selected) priority.color else Color.Black,
+            color = if (selected) priority.color else MaterialTheme.colorScheme.onSurface,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
         )
     }
@@ -2612,7 +2616,7 @@ fun TaskCard(
             Icon(
                 imageVector = Icons.Filled.Timer,
                 contentDescription = "Tracked Time",
-                tint = DarkBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -2620,7 +2624,7 @@ fun TaskCard(
                 text = displayTime,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = DarkBlue
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -2631,7 +2635,7 @@ fun TaskCard(
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (task.completed)
-                Color.Gray.copy(alpha = 0.2f)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
             else
                 task.priority.color.copy(alpha = 0.1f)
         ),
@@ -2673,7 +2677,10 @@ fun TaskCard(
                     text = task.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (task.completed) Color.Gray else Color.Black,
+                    color = if (task.completed) 
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f) 
+                    else 
+                        MaterialTheme.colorScheme.onSurface,
                     textDecoration = if (task.completed) TextDecoration.LineThrough else null
                 )
 
@@ -2682,7 +2689,7 @@ fun TaskCard(
                     Text(
                         text = task.description,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.DarkGray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2707,7 +2714,7 @@ fun TaskCard(
                         Text(
                             text = listName,
                             style = MaterialTheme.typography.bodySmall,
-                            color = DarkBlue,
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -2725,7 +2732,10 @@ fun TaskCard(
                         .size(40.dp)
                         .clip(CircleShape)
                         .background(
-                            color = if (task.isTracking) DarkBlue.copy(alpha = 0.2f) else Color.Transparent,
+                            color = if (task.isTracking) 
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) 
+                            else 
+                                Color.Transparent,
                             shape = CircleShape
                         )
                         .clickable {
@@ -2738,7 +2748,7 @@ fun TaskCard(
                     Icon(
                         imageVector = if (task.isTracking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                         contentDescription = if (task.isTracking) "Stop Tracking" else "Start Tracking",
-                        tint = DarkBlue
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -2750,7 +2760,7 @@ fun TaskCard(
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = "Delete Task",
-                        tint = DarkRed
+                        tint = MaterialTheme.colorScheme.error
                     )
                 }
             }
@@ -2771,9 +2781,9 @@ fun DatePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        containerColor = Color.White,
-        titleContentColor = Color.Black,
-        textContentColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
         title = { Text("Select Date") },
         text = {
             Column {
@@ -2817,7 +2827,7 @@ fun DatePickerDialog(
                             text = day,
                             modifier = Modifier.weight(1f),
                             textAlign = TextAlign.Center,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -2871,7 +2881,7 @@ fun DatePickerDialog(
                                         text = day.toString(),
                                         color = when {
                                             isSelected -> MaterialTheme.colorScheme.onPrimary
-                                            else -> Color.Black
+                                            else -> MaterialTheme.colorScheme.onSurface
                                         }
                                     )
                                 }
@@ -2887,7 +2897,7 @@ fun DatePickerDialog(
         confirmButton = {
             TextButton(
                 onClick = { onDateSelected(selectedDate.value) },
-                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text("OK")
             }
@@ -2895,7 +2905,7 @@ fun DatePickerDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismissRequest,
-                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text("Cancel")
             }
@@ -3007,7 +3017,7 @@ fun WeekCalendar(
                     Text(
                         text = day,
                         fontSize = 12.sp,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -3037,14 +3047,14 @@ fun WeekCalendar(
                     val hasTasks = hasTasksOnDate(dayCalendar)
 
                     val backgroundColor = when {
-                        isSelected -> PinkHighlight
-                        isToday -> MaterialTheme.colorScheme.primary
-                        else -> Color.Transparent
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        isToday -> MaterialTheme.colorScheme.primaryContainer
+                        else -> MaterialTheme.colorScheme.surface
                     }
                     val textColor = when {
-                        isSelected -> Color.Black
-                        isToday -> MaterialTheme.colorScheme.onPrimary
-                        else -> Color.Black
+                        isSelected -> MaterialTheme.colorScheme.onPrimary
+                        isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                        else -> MaterialTheme.colorScheme.onSurface
                     }
 
                     Box(
@@ -3067,6 +3077,9 @@ fun WeekCalendar(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
+                            // Get the primary color outside of drawBehind
+                            val primaryColor = MaterialTheme.colorScheme.primary
+
                             Text(
                                 text = day.toString(),
                                 fontSize = 14.sp,
@@ -3075,9 +3088,9 @@ fun WeekCalendar(
                                 modifier = if (hasTasks) {
                                     // Add blue underline for days with tasks using drawBehind
                                     Modifier.drawBehind {
-                                        // Draw a blue line under the text
+                                        // Draw a line under the text using the captured color
                                         drawLine(
-                                            color = DarkBlue,
+                                            color = primaryColor, // Use the captured color here
                                             start = Offset(0f, size.height),
                                             end = Offset(size.width, size.height),
                                             strokeWidth = 2f
@@ -3089,7 +3102,7 @@ fun WeekCalendar(
                                 text = jalaliDateStr,
                                 fontSize = 10.sp,
                                 textAlign = TextAlign.Center,
-                                color = if (isSelected || isToday) textColor.copy(alpha = 0.7f) else Color.Gray
+                                color = if (isSelected || isToday) textColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -3127,9 +3140,9 @@ fun MonthYearPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        containerColor = Color.White,
-        titleContentColor = Color.Black,
-        textContentColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
         title = { Text("Select Month and Year") },
         text = {
             Column {
@@ -3141,17 +3154,17 @@ fun MonthYearPickerDialog(
                     IconButton(onClick = {
                         if (selectedYear > yearRange.first) selectedYear--
                     }, enabled = selectedYear > yearRange.first) {
-                        Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Previous Year", tint = Color.Black)
+                        Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Previous Year", tint = MaterialTheme.colorScheme.onSurface)
                     }
-                    Text(selectedYear.toString(), fontWeight = FontWeight.Bold, color = Color.Black)
+                    Text(selectedYear.toString(), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     IconButton(onClick = {
                         if (selectedYear < yearRange.last) selectedYear++
                     }, enabled = selectedYear < yearRange.last) {
-                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next Year", tint = Color.Black)
+                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next Year", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
-                Text("Month:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp), color = Color.Black)
+                Text("Month:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurface)
                 LazyRow(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.Center
@@ -3162,7 +3175,7 @@ fun MonthYearPickerDialog(
                             TextButton(
                                 onClick = { selectedMonth = monthIndex },
                                 colors = ButtonDefaults.textButtonColors(
-                                    contentColor = if (isSelected) DarkBlue else Color.Black
+                                    contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
                             ) {
                                 Text(
@@ -3178,7 +3191,7 @@ fun MonthYearPickerDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirmation(selectedYear, selectedMonth) },
-                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text("OK")
             }
@@ -3186,7 +3199,7 @@ fun MonthYearPickerDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismissRequest,
-                colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text("Cancel")
             }
@@ -3432,7 +3445,7 @@ fun BackupScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = LightBlue
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             ) {
                 Column(
@@ -3698,7 +3711,7 @@ fun RestoreScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = DarkRed.copy(alpha = 0.1f)
+                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
                 )
             ) {
                 Column(
@@ -3711,7 +3724,7 @@ fun RestoreScreen(
                         text = "Warning",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = DarkRed
+                        color = MaterialTheme.colorScheme.error
                     )
                     
                     Spacer(modifier = Modifier.height(8.dp))
@@ -3720,7 +3733,7 @@ fun RestoreScreen(
                         text = "Restoring data will replace all your current lists and tasks. This action cannot be undone.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
-                        color = Color.Black
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
             }
@@ -3846,14 +3859,14 @@ fun SearchResultItem(
                     text = task.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 
                 if (task.description.isNotBlank()) {
                     Text(
                         text = task.description,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.DarkGray,
+                        color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -3863,7 +3876,7 @@ fun SearchResultItem(
                 Text(
                     text = dateFormatter.format(task.dueDate.time),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
             

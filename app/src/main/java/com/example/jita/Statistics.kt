@@ -871,7 +871,7 @@ fun StatisticsScreen(
             confirmButton = {
                 TextButton(
                     onClick = { showFilterDialog = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Apply")
                 }
@@ -889,7 +889,7 @@ fun StatisticsScreen(
                         maxDurationString = "99:59:59"
                         showFilterDialog = false
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkRed)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Reset")
                 }
@@ -1069,7 +1069,7 @@ fun StatisticsScreen(
             confirmButton = {
                 TextButton(
                     onClick = { showTimeTrackingFilterDialog = false }, // Close this dialog
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkBlue)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Apply")
                 }
@@ -1085,7 +1085,7 @@ fun StatisticsScreen(
                         timeTrackingEndDate = null
                         showTimeTrackingFilterDialog = false // Close this dialog
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = DarkRed)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Reset")
                 }
