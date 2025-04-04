@@ -136,6 +136,14 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
 import android.widget.Toast // Add Toast import
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResultLauncher
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
+import androidx.activity.compose.rememberLauncherForActivityResult
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Date
 
 
 // Define navigation routes
@@ -144,6 +152,7 @@ object AppDestinations {
     const val LISTS_SCREEN = "lists"
     const val POMODORO_SCREEN = "pomodoro"
     const val STATISTICS_SCREEN = "statistics" // Add statistics route
+    const val BACKUP_SCREEN = "backup" // Add backup route
 }
 
 // Define custom colors
@@ -360,6 +369,14 @@ class MainActivity : ComponentActivity() {
                             // Remove selectedDate and onDateSelected as they are not used yet
                             // selectedDate = selectedDate,
                             // onDateSelected = onDateSelected
+                        )
+                    }
+                    // Add composable for the new Backup screen
+                    composable(AppDestinations.BACKUP_SCREEN) {
+                        BackupScreen(
+                            navController = navController,
+                            listNameEntities = listNameEntities,
+                            tasks = tasks
                         )
                     }
                 }
@@ -810,12 +827,13 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // Update drawer items to include Pomodoro and Statistics
+    // Update drawer items to include Pomodoro, Statistics, and Backup
     val drawerItems = listOf(
         AppDestinations.MAIN_SCREEN to "Calendar",
         AppDestinations.LISTS_SCREEN to "Lists",
         AppDestinations.POMODORO_SCREEN to "Pomodoro",
-        AppDestinations.STATISTICS_SCREEN to "Statistics" // Add Statistics item
+        AppDestinations.STATISTICS_SCREEN to "Statistics",
+        AppDestinations.BACKUP_SCREEN to "Backup" // Add Backup item
     )
 
     // Local state for the Add Task Dialog form
@@ -3181,5 +3199,231 @@ fun parseTimeToMillis(timeString: String): Long {
         return (hours * 3600 + minutes * 60 + seconds) * 1000
     } catch (e: Exception) {
         return 0L
+    }
+}
+
+// Add the BackupScreen composable
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BackupScreen(
+    navController: NavHostController,
+    listNameEntities: List<ListNameEntity>,
+    tasks: List<Task>
+) {
+    val context = LocalContext.current
+    var isExporting by remember { mutableStateOf(false) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    
+    // Create launcher for document creation
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            isExporting = true
+            exportMessage = null
+            
+            // Create JSON data
+            val backupData = JSONObject().apply {
+                // Add lists
+                val listsArray = JSONArray()
+                listNameEntities.forEach { list ->
+                    listsArray.put(JSONObject().apply {
+                        put("id", list.id)
+                        put("name", list.name)
+                    })
+                }
+                put("lists", listsArray)
+                
+                // Add tasks
+                val tasksArray = JSONArray()
+                tasks.forEach { task ->
+                    tasksArray.put(JSONObject().apply {
+                        put("id", task.id)
+                        put("name", task.name)
+                        put("description", task.description)
+                        put("dueDate", task.dueDate.timeInMillis)
+                        put("priority", task.priority.name)
+                        put("list", task.list ?: JSONObject.NULL)
+                        put("trackedTimeMillis", task.trackedTimeMillis)
+                        put("isTracking", task.isTracking)
+                        put("trackingStartTime", task.trackingStartTime)
+                        put("completed", task.completed)
+                    })
+                }
+                put("tasks", tasksArray)
+            }
+            
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    outputStream.write(backupData.toString(2).toByteArray())
+                }
+                exportMessage = "Backup successfully saved!"
+            } catch (e: Exception) {
+                Log.e("BackupScreen", "Error exporting data", e)
+                exportMessage = "Error: ${e.localizedMessage}"
+            } finally {
+                isExporting = false
+                showExportDialog = true
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Backup Data",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Text(
+                text = "Backup Your Data",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            
+            // Description
+            Text(
+                text = "Create a backup of all your lists and tasks. The backup will be saved as a JSON file that you can use to restore your data later.",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Stats
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = LightBlue
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Data Summary",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${listNameEntities.size}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Lists")
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${tasks.size}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Tasks")
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${tasks.count { it.completed }}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Completed")
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Export button
+            Button(
+                onClick = {
+                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                        .format(Date())
+                    createDocumentLauncher.launch("JITA_Backup_$timestamp.json")
+                },
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                ),
+                enabled = !isExporting
+            ) {
+                if (isExporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = if (isExporting) "Exporting..." else "Export Backup",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            
+            // GIF image
+            GifImage(
+                modifier = Modifier.size(200.dp),
+                drawableResId = R.drawable.bun
+            )
+        }
+    }
+    
+    // Result dialog
+    if (showExportDialog && exportMessage != null) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text("Backup Result") },
+            text = { Text(exportMessage!!) },
+            confirmButton = {
+                TextButton(onClick = { showExportDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
     }
 }
