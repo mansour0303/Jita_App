@@ -1674,14 +1674,18 @@ fun MainScreen(
         }
         var timeError by remember { mutableStateOf<String?>(null) }
         
-        // Add state for attachment paths
+        // Add state for attachment paths - Initialized from the task being edited
         var editedImagePath by remember(taskToEdit) { mutableStateOf(taskToEdit!!.imagePath) }
         var editedFilePath by remember(taskToEdit) { mutableStateOf(taskToEdit!!.filePath) }
+        // newTaskImagePath and newTaskFilePath are still used for *newly selected* files via the pickers
 
         AlertDialog(
             onDismissRequest = {
                 showEditTaskDialog = false
-                taskToEdit = null
+                taskToEdit = null // Resets editedImagePath/editedFilePath via remember key change
+                // Reset temporary picker state used by Add/Edit dialogs
+                newTaskImagePath = null
+                newTaskFilePath = null
             },
             containerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -1867,8 +1871,8 @@ fun MainScreen(
                     ) {
                         // Image button
                         Button(
-                            onClick = { 
-                                imagePickerLauncher.launch("image/*") 
+                            onClick = {
+                                imagePickerLauncher.launch("image/*")
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
@@ -1878,7 +1882,7 @@ fun MainScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Add, 
+                                    imageVector = Icons.Default.Add,
                                     contentDescription = "Add Image",
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -1886,12 +1890,12 @@ fun MainScreen(
                                 Text("Image")
                             }
                         }
-                        
+
                         Spacer(modifier = Modifier.width(8.dp))
-                        
+
                         // File button
                         Button(
-                            onClick = { 
+                            onClick = {
                                 filePickerLauncher.launch(arrayOf("*/*"))
                             },
                             modifier = Modifier.weight(1f),
@@ -1902,7 +1906,7 @@ fun MainScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Settings,
+                                    imageVector = Icons.Default.Settings, // Using Settings icon for file
                                     contentDescription = "Add File",
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -1911,27 +1915,65 @@ fun MainScreen(
                             }
                         }
                     }
-                    
-                    // Show attachment status
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        if (editedImagePath != null || newTaskImagePath != null) {
-                            Text(
-                                "Image attached ✓",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+
+                    // Show attachment status and remove buttons
+                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) { // Align Start
+                        // Image attachment status and remove button
+                        val currentImagePath = newTaskImagePath ?: editedImagePath // Determine currently active path
+                        if (currentImagePath != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    "Image: ${currentImagePath.substringAfterLast('/')}", // Show filename
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp) // Allow text to take space
+                                )
+                                IconButton(
+                                    onClick = {
+                                        newTaskImagePath = null // Clear newly selected image if any
+                                        editedImagePath = null  // Clear existing/edited image path
+                                    },
+                                    modifier = Modifier.size(32.dp) // Touch target size
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "Remove Image",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp) // Icon size
+                                    )
+                                }
+                            }
                         }
-                        
-                        if (editedFilePath != null || newTaskFilePath != null) {
-                            Text(
-                                "File attached ✓",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+
+                        // File attachment status and remove button
+                        val currentFilePath = newTaskFilePath ?: editedFilePath // Determine currently active path
+                        if (currentFilePath != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    "File: ${currentFilePath.substringAfterLast('/')}", // Show filename
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp) // Allow text to take space
+                                )
+                                IconButton(
+                                    onClick = {
+                                        newTaskFilePath = null // Clear newly selected file if any
+                                        editedFilePath = null  // Clear existing/edited file path
+                                    },
+                                    modifier = Modifier.size(32.dp) // Touch target size
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "Remove File",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp) // Icon size
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -1984,8 +2026,8 @@ fun MainScreen(
                                 isTracking = taskToEdit!!.isTracking,
                                 trackingStartTime = taskToEdit!!.trackingStartTime,
                                 completed = taskToEdit!!.completed,
-                                imagePath = newTaskImagePath ?: editedImagePath, // Use new image if selected, otherwise keep existing
-                                filePath = newTaskFilePath ?: editedFilePath    // Use new file if selected, otherwise keep existing
+                                imagePath = newTaskImagePath ?: editedImagePath, // Use new image if selected, otherwise use edited (which might be null now)
+                                filePath = newTaskFilePath ?: editedFilePath    // Use new file if selected, otherwise use edited (which might be null now)
                             )
 
                             // Delete the old task and add the updated one
@@ -2004,7 +2046,10 @@ fun MainScreen(
                 TextButton(
                     onClick = {
                         showEditTaskDialog = false
-                        taskToEdit = null
+                        taskToEdit = null // Resets editedImagePath/editedFilePath
+                        // Reset temporary picker state
+                        newTaskImagePath = null
+                        newTaskFilePath = null
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
