@@ -41,6 +41,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll // Add this import
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -1385,7 +1387,9 @@ fun MainScreen(
             title = { Text("Create New Task") },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()), // Add scroll modifier
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Task Name
@@ -1728,7 +1732,9 @@ fun MainScreen(
             title = { Text("Edit Task") },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()), // Add scroll modifier
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Task Name
