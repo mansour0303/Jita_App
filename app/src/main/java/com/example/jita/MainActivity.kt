@@ -156,6 +156,8 @@ import com.example.jita.data.ListNameDao
 import com.example.jita.data.TaskDao
 import java.io.File
 import java.io.FileOutputStream
+import android.content.Intent
+import androidx.core.content.FileProvider
 
 
 // Define navigation routes
@@ -3181,7 +3183,12 @@ fun TaskCard(
                             // Image attachment
                             task.imagePath?.let { path ->
                                 Card(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            // Open image when clicked
+                                            openImageFile(context, path)
+                                        },
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                     )
@@ -3203,7 +3210,12 @@ fun TaskCard(
                             // File attachment
                             task.filePath?.let { path ->
                                 Card(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            // Open file when clicked
+                                            openFile(context, path)
+                                        },
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                     )
@@ -4368,5 +4380,167 @@ fun SearchResultItem(
                 tint = MaterialTheme.colorScheme.primary
             )
         }
+    }
+}
+
+/**
+ * Opens an image file using the default viewer
+ */
+private fun openImageFile(context: Context, imagePath: String) {
+    try {
+        val imageFile = File(imagePath)
+        if (!imageFile.exists()) {
+            Toast.makeText(context, "Image file not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val contentUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            imageFile
+        )
+        
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "image/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        
+        val chooser = Intent.createChooser(intent, "View Image")
+        if (intent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(chooser)
+        } else {
+            Toast.makeText(context, "No app available to view images", Toast.LENGTH_SHORT).show()
+        }
+    } catch (e: Exception) {
+        Log.e("ImageViewer", "Error opening image: ${e.localizedMessage}")
+        Toast.makeText(context, "Error opening image: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+/**
+ * Opens a file using the appropriate app based on MIME type
+ */
+private fun openFile(context: Context, filePath: String) {
+    try {
+        val file = File(filePath)
+        if (!file.exists()) {
+            Toast.makeText(context, "File not found: ${file.name}", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Log file details for debugging
+        Log.d("FileOpener", "Opening file: ${file.absolutePath}")
+        Log.d("FileOpener", "File exists: ${file.exists()}, size: ${file.length()}")
+        
+        val mimeType = getMimeType(file.name)
+        Log.d("FileOpener", "Detected MIME type: $mimeType")
+        
+        val contentUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        Log.d("FileOpener", "Content URI: $contentUri")
+        
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        
+        // Check if there's an app that can handle this file type
+        val resolveInfo = context.packageManager.queryIntentActivities(intent, 0)
+        if (resolveInfo.isEmpty()) {
+            Log.e("FileOpener", "No app found to open file with MIME type: $mimeType")
+            
+            // Try with a more generic MIME type
+            when {
+                mimeType.startsWith("audio/") -> {
+                    intent.setDataAndType(contentUri, "audio/*")
+                    Toast.makeText(context, "Trying to open as generic audio file", Toast.LENGTH_SHORT).show()
+                }
+                mimeType.startsWith("video/") -> {
+                    intent.setDataAndType(contentUri, "video/*")
+                    Toast.makeText(context, "Trying to open as generic video file", Toast.LENGTH_SHORT).show()
+                }
+                mimeType.startsWith("image/") -> {
+                    intent.setDataAndType(contentUri, "image/*")
+                    Toast.makeText(context, "Trying to open as generic image file", Toast.LENGTH_SHORT).show()
+                }
+                mimeType.startsWith("application/") -> {
+                    // Special handling for PDF files
+                    if (file.name.endsWith(".pdf", ignoreCase = true)) {
+                        intent.setDataAndType(contentUri, "application/pdf")
+                        Toast.makeText(context, "Trying to open as PDF", Toast.LENGTH_SHORT).show()
+                    } else {
+                        intent.setDataAndType(contentUri, "*/*")
+                        Toast.makeText(context, "Trying to open with any available app", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                else -> {
+                    intent.setDataAndType(contentUri, "*/*")
+                    Toast.makeText(context, "Trying to open with any available app", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        
+        val chooser = Intent.createChooser(intent, "Open File")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        
+        try {
+            context.startActivity(chooser)
+        } catch (e: Exception) {
+            Log.e("FileOpener", "Error starting activity: ${e.localizedMessage}")
+            Toast.makeText(context, "No app found to open this file type", Toast.LENGTH_LONG).show()
+        }
+    } catch (e: Exception) {
+        Log.e("FileOpener", "Error opening file: ${e.localizedMessage}", e)
+        Toast.makeText(context, "Error opening file: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+    }
+}
+
+/**
+ * Gets MIME type from file name/extension
+ */
+private fun getMimeType(fileName: String): String {
+    return when {
+        // Documents
+        fileName.endsWith(".pdf", ignoreCase = true) -> "application/pdf"
+        fileName.endsWith(".doc", ignoreCase = true) -> "application/msword"
+        fileName.endsWith(".docx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        fileName.endsWith(".xls", ignoreCase = true) -> "application/vnd.ms-excel"
+        fileName.endsWith(".xlsx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        fileName.endsWith(".ppt", ignoreCase = true) -> "application/vnd.ms-powerpoint"
+        fileName.endsWith(".pptx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        fileName.endsWith(".txt", ignoreCase = true) -> "text/plain"
+        
+        // Images
+        fileName.endsWith(".jpg", ignoreCase = true) || fileName.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
+        fileName.endsWith(".png", ignoreCase = true) -> "image/png"
+        fileName.endsWith(".gif", ignoreCase = true) -> "image/gif"
+        fileName.endsWith(".bmp", ignoreCase = true) -> "image/bmp"
+        fileName.endsWith(".webp", ignoreCase = true) -> "image/webp"
+        
+        // Audio
+        fileName.endsWith(".mp3", ignoreCase = true) -> "audio/mpeg"
+        fileName.endsWith(".wav", ignoreCase = true) -> "audio/wav"
+        fileName.endsWith(".ogg", ignoreCase = true) -> "audio/ogg"
+        fileName.endsWith(".flac", ignoreCase = true) -> "audio/flac"
+        fileName.endsWith(".aac", ignoreCase = true) -> "audio/aac"
+        fileName.endsWith(".m4a", ignoreCase = true) -> "audio/m4a"
+        
+        // Video
+        fileName.endsWith(".mp4", ignoreCase = true) -> "video/mp4"
+        fileName.endsWith(".3gp", ignoreCase = true) -> "video/3gpp"
+        fileName.endsWith(".webm", ignoreCase = true) -> "video/webm"
+        fileName.endsWith(".mkv", ignoreCase = true) -> "video/x-matroska"
+        
+        // Archives
+        fileName.endsWith(".zip", ignoreCase = true) -> "application/zip"
+        fileName.endsWith(".rar", ignoreCase = true) -> "application/x-rar-compressed"
+        fileName.endsWith(".7z", ignoreCase = true) -> "application/x-7z-compressed"
+        
+        // Generic fallback - let the system try to figure it out
+        else -> "*/*"
     }
 }
