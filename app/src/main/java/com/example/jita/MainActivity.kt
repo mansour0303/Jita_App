@@ -1,8 +1,14 @@
 package com.example.jita
 
 //import androidx.compose.material3.AsyncImagePainter
+import android.Manifest
+import android.content.Context
+import android.net.Uri
+import android.os.Build
 import android.os.Build.VERSION.SDK_INT
 import android.os.Bundle
+import android.os.Environment
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -138,7 +144,6 @@ import java.util.Locale
 import kotlin.math.abs
 import android.widget.Toast // Add Toast import
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -147,6 +152,8 @@ import org.json.JSONObject
 import java.util.Date
 import com.example.jita.data.ListNameDao
 import com.example.jita.data.TaskDao
+import java.io.File
+import java.io.FileOutputStream
 
 
 // Define navigation routes
@@ -183,8 +190,24 @@ fun Task.toTaskEntity(): TaskEntity {
         trackedTimeMillis = this.trackedTimeMillis,
         isTracking = this.isTracking,
         trackingStartTime = this.trackingStartTime,
-        completed = this.completed
+        completed = this.completed,  // Add completed flag
+        imagePath = this.imagePath,
+        filePath = this.filePath
     )
+}
+
+// Helper function to get file name from URI
+fun getFileNameFromUri(context: Context, uri: Uri): String? {
+    var fileName: String? = null
+    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val displayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (displayNameIndex != -1) {
+                fileName = cursor.getString(displayNameIndex)
+            }
+        }
+    }
+    return fileName
 }
 
 class MainActivity : ComponentActivity() {
@@ -233,7 +256,9 @@ class MainActivity : ComponentActivity() {
                         isTracking = entity.isTracking,
                         trackedTimeMillis = entity.trackedTimeMillis,
                         trackingStartTime = entity.trackingStartTime,
-                        completed = entity.completed  // Add completed flag
+                        completed = entity.completed,  // Add completed flag
+                        imagePath = entity.imagePath,
+                        filePath = entity.filePath
                     )
                 }.toMutableStateList()
             }
@@ -865,6 +890,8 @@ fun MainScreen(
     var newTaskDate by rememberSaveable { mutableStateOf(Calendar.getInstance()) } // Keep Calendar instance
     var newTaskPriority by rememberSaveable { mutableStateOf(TaskPriority.MEDIUM) }
     var newTaskList by rememberSaveable { mutableStateOf<String?>(null) }
+    var newTaskImagePath by rememberSaveable { mutableStateOf<String?>(null) } // Add for image path
+    var newTaskFilePath by rememberSaveable { mutableStateOf<String?>(null) } // Add for file path
     var showDatePicker by remember { mutableStateOf(false) }
     var isListDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -889,6 +916,101 @@ fun MainScreen(
     // Force recomposition every second when any task is being tracked
     val isAnyTaskTracking = tasks.any { it.isTracking }
     var tickerState by remember { mutableStateOf(System.currentTimeMillis()) }
+    
+    // Add file and image picker launchers
+    val context = LocalContext.current
+    
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { selectedUri ->
+            // Copy file to app's files directory
+            val fileName = "jita_image_${System.currentTimeMillis()}.jpg"
+            val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "tija_files")
+            if (!targetDir.exists()) {
+                targetDir.mkdirs()
+            }
+            val targetFile = File(targetDir, fileName)
+            
+            try {
+                context.contentResolver.openInputStream(selectedUri)?.use { input ->
+                    FileOutputStream(targetFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                newTaskImagePath = targetFile.absolutePath
+                Toast.makeText(context, "Image attached successfully", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e("ImagePicker", "Error copying image", e)
+                Toast.makeText(context, "Failed to attach image: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    // File picker launcher
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { selectedUri ->
+            // Get file name from URI
+            val fileName = getFileNameFromUri(context, selectedUri) ?: "jita_file_${System.currentTimeMillis()}"
+            val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "tija_files")
+            if (!targetDir.exists()) {
+                targetDir.mkdirs()
+            }
+            val targetFile = File(targetDir, fileName)
+            
+            try {
+                context.contentResolver.openInputStream(selectedUri)?.use { input ->
+                    FileOutputStream(targetFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                newTaskFilePath = targetFile.absolutePath
+                Toast.makeText(context, "File attached successfully", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e("FilePicker", "Error copying file", e)
+                Toast.makeText(context, "Failed to attach file: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    // Add permission request launcher
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.entries.all { it.value }
+        if (allGranted) {
+            Toast.makeText(context, "Permissions granted", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Permissions denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    // Function to check and request permissions
+    fun checkAndRequestPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO
+                )
+            )
+        } else {
+            requestPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+            )
+        }
+    }
+    
+    // Check permissions on initialization
+    LaunchedEffect(Unit) {
+        checkAndRequestPermissions()
+    }
 
     // This LaunchedEffect is crucial for updating the timer display
     LaunchedEffect(isAnyTaskTracking) {
@@ -1005,7 +1127,7 @@ fun MainScreen(
                     TopAppBar(
                         title = {
                             Text(
-                                text = "JITA",
+                                text = "TIJA",
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
                             )
@@ -1448,12 +1570,15 @@ fun MainScreen(
                                 description = newTaskDescription.trim(),
                                 dueDate = newTaskDate.clone() as Calendar, // Clone to avoid mutation issues
                                 priority = newTaskPriority,
-                                list = newTaskList
+                                list = newTaskList,
+                                imagePath = newTaskImagePath,
+                                filePath = newTaskFilePath
                             )
                             onAddTask(newTask) // Call the callback to handle DB insertion
                             showAddTaskDialog = false
-                            // Reset fields (optional, happens on next FAB click anyway)
-                            // newTaskName = "" ... etc.
+                            // Reset attachment paths for next time
+                            newTaskImagePath = null
+                            newTaskFilePath = null
                         }
                     },
                     enabled = newTaskName.isNotBlank(), // Basic validation
@@ -1705,7 +1830,10 @@ fun MainScreen(
                                 list = newTaskList,
                                 trackedTimeMillis = timeMillis, // Use the edited time
                                 isTracking = taskToEdit!!.isTracking,
-                                trackingStartTime = taskToEdit!!.trackingStartTime
+                                trackingStartTime = taskToEdit!!.trackingStartTime,
+                                completed = taskToEdit!!.completed,
+                                imagePath = taskToEdit!!.imagePath, // Preserve image path
+                                filePath = taskToEdit!!.filePath   // Preserve file path
                             )
 
                             // Delete the old task and add the updated one
@@ -2538,7 +2666,9 @@ data class Task(
     val isTracking: Boolean = false,
     val trackedTimeMillis: Long = 0,
     val trackingStartTime: Long = 0,
-    val completed: Boolean = false  // Add completed flag
+    val completed: Boolean = false,  // Add completed flag
+    val imagePath: String? = null,
+    val filePath: String? = null
 )
 
 // Task priority enum
@@ -2717,6 +2847,62 @@ fun TaskCard(
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium
                         )
+                    }
+                    
+                    // Show image attachment indicator
+                    if (task.imagePath != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add, // Would be ideal to use an image icon
+                                contentDescription = "Image Attached",
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "Image",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    
+                    // Show file attachment indicator
+                    if (task.filePath != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add, // Would be ideal to use a file/document icon
+                                contentDescription = "File Attached",
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "File",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
             }
@@ -3375,6 +3561,8 @@ fun BackupScreen(
                         put("isTracking", task.isTracking)
                         put("trackingStartTime", task.trackingStartTime)
                         put("completed", task.completed)
+                        put("imagePath", task.imagePath ?: JSONObject.NULL)
+                        put("filePath", task.filePath ?: JSONObject.NULL)
                     })
                 }
                 put("tasks", tasksArray)
@@ -3610,6 +3798,12 @@ fun RestoreScreen(
                     val isCompleted = if (taskObj.has("completed")) 
                         taskObj.getBoolean("completed") else false
                     
+                    val imagePath = if (taskObj.has("imagePath") && !taskObj.isNull("imagePath"))
+                        taskObj.getString("imagePath") else null
+                        
+                    val filePath = if (taskObj.has("filePath") && !taskObj.isNull("filePath"))
+                        taskObj.getString("filePath") else null
+                    
                     if (isCompleted) completedTaskCount++
                     
                     taskEntities.add(
@@ -3623,7 +3817,9 @@ fun RestoreScreen(
                             trackedTimeMillis = taskObj.getLong("trackedTimeMillis"),
                             isTracking = taskObj.getBoolean("isTracking"),
                             trackingStartTime = taskObj.getLong("trackingStartTime"),
-                            completed = isCompleted
+                            completed = isCompleted,
+                            imagePath = imagePath,
+                            filePath = filePath
                         )
                     )
                 }

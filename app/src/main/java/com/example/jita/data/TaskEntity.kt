@@ -15,5 +15,7 @@ data class TaskEntity(
     val trackedTimeMillis: Long = 0,
     val isTracking: Boolean = false,
     val trackingStartTime: Long = 0,
-    val completed: Boolean = false
+    val completed: Boolean = false,
+    val imagePath: String? = null,
+    val filePath: String? = null
 )
