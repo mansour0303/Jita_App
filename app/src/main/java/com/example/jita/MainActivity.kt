@@ -2971,8 +2971,8 @@ fun TaskCard(
     onEditClick: () -> Unit = {},
     onClick: () -> Unit = {},
     onTrackingToggle: (Boolean) -> Unit = {},
-    onCompletedChange: (Boolean) -> Unit = {}, // Add callback for checkbox
-    currentTimeMillis: Long = 0  // This parameter forces recomposition
+    onCompletedChange: (Boolean) -> Unit = {},
+    currentTimeMillis: Long = 0
 ) {
     val dateFormatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
     val context = LocalContext.current
@@ -3143,63 +3143,95 @@ fun TaskCard(
                     }
                 }
             }
-            
-            // Display image attachment if available
-            if (task.imagePath != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(task.imagePath)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Attached Image",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(150.dp)
-                    )
-                }
-            }
-            
-            // Display file attachment if available
-            if (task.filePath != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                ) {
+
+
+            val hasAttachments = task.imagePath != null || task.filePath != null
+            var attachmentsExpanded by remember { mutableStateOf(false) }
+
+            if (hasAttachments) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Collapsible header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(8.dp),
+                            .clickable { attachmentsExpanded = !attachmentsExpanded }
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Settings, // Using Settings as a placeholder for a document icon
-                            contentDescription = "File Attachment",
+                            imageVector = if (attachmentsExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = if (attachmentsExpanded) "Collapse Attachments" else "Expand Attachments",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        // Extract the file name from the path
-                        val fileName = remember(task.filePath) {
-                            task.filePath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "Attached File"
-                        }
-                        
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = fileName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            "Attachments",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
                         )
+                    }
+
+                    // Attachments content
+                    AnimatedVisibility(visible = attachmentsExpanded) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Image attachment
+                            task.imagePath?.let { path ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    )
+                                ) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context)
+                                            .data(path)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = "Attached Image",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(150.dp)
+                                    )
+                                }
+                            }
+
+                            // File attachment
+                            task.filePath?.let { path ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Settings,
+                                            contentDescription = "File Attachment",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = path.substringAfterLast('/'),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
