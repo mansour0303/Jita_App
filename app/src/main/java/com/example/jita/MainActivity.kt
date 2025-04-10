@@ -981,11 +981,7 @@ fun MainScreen(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
-        if (allGranted) {
-            Toast.makeText(context, "Permissions granted", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(context, "Permissions denied", Toast.LENGTH_SHORT).show()
-        }
+        // Remove toast notifications about permissions
     }
     
     // Function to check and request permissions
@@ -1558,6 +1554,82 @@ fun MainScreen(
                             }
                         }
                     }
+                    
+                    // Attachment buttons
+                    Text("Attachments:", color = MaterialTheme.colorScheme.onSurface)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Image button
+                        Button(
+                            onClick = { 
+                                imagePickerLauncher.launch("image/*") 
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Add, 
+                                    contentDescription = "Add Image",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Image")
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        // File button
+                        Button(
+                            onClick = { 
+                                filePickerLauncher.launch(arrayOf("*/*"))
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Add File",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("File")
+                            }
+                        }
+                    }
+                    
+                    // Show attachment status
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        if (newTaskImagePath != null) {
+                            Text(
+                                "Image attached ✓",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        
+                        if (newTaskFilePath != null) {
+                            Text(
+                                "File attached ✓",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -1601,6 +1673,10 @@ fun MainScreen(
             mutableStateOf(formatTime(taskToEdit!!.trackedTimeMillis))
         }
         var timeError by remember { mutableStateOf<String?>(null) }
+        
+        // Add state for attachment paths
+        var editedImagePath by remember(taskToEdit) { mutableStateOf(taskToEdit!!.imagePath) }
+        var editedFilePath by remember(taskToEdit) { mutableStateOf(taskToEdit!!.filePath) }
 
         AlertDialog(
             onDismissRequest = {
@@ -1782,6 +1858,82 @@ fun MainScreen(
                             }
                         }
                     }
+                    
+                    // Attachment buttons
+                    Text("Attachments:", color = MaterialTheme.colorScheme.onSurface)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Image button
+                        Button(
+                            onClick = { 
+                                imagePickerLauncher.launch("image/*") 
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Add, 
+                                    contentDescription = "Add Image",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Image")
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        // File button
+                        Button(
+                            onClick = { 
+                                filePickerLauncher.launch(arrayOf("*/*"))
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Add File",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("File")
+                            }
+                        }
+                    }
+                    
+                    // Show attachment status
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        if (editedImagePath != null || newTaskImagePath != null) {
+                            Text(
+                                "Image attached ✓",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        
+                        if (editedFilePath != null || newTaskFilePath != null) {
+                            Text(
+                                "File attached ✓",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
 
                     // After list selection dropdown, add time editor
                     Text("Tracked Time:", color = MaterialTheme.colorScheme.onSurface)
@@ -1832,8 +1984,8 @@ fun MainScreen(
                                 isTracking = taskToEdit!!.isTracking,
                                 trackingStartTime = taskToEdit!!.trackingStartTime,
                                 completed = taskToEdit!!.completed,
-                                imagePath = taskToEdit!!.imagePath, // Preserve image path
-                                filePath = taskToEdit!!.filePath   // Preserve file path
+                                imagePath = newTaskImagePath ?: editedImagePath, // Use new image if selected, otherwise keep existing
+                                filePath = newTaskFilePath ?: editedFilePath    // Use new file if selected, otherwise keep existing
                             )
 
                             // Delete the old task and add the updated one
@@ -2730,6 +2882,7 @@ fun TaskCard(
     currentTimeMillis: Long = 0  // This parameter forces recomposition
 ) {
     val dateFormatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+    val context = LocalContext.current
 
     // Create a separate composable for the timer to ensure it recomposes independently
     @Composable
@@ -2772,182 +2925,189 @@ fun TaskCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.Top
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // Add checkbox
-            Checkbox(
-                checked = task.completed,
-                onCheckedChange = { isChecked ->
-                    onCompletedChange(isChecked)
-                },
-                modifier = Modifier.padding(top = 2.dp, end = 8.dp)
-            )
-
-            // Priority indicator
-            Box(
-                modifier = Modifier
-                    .padding(top = 4.dp)
-                    .size(12.dp)
-                    .background(task.priority.color, CircleShape)
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Task details
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 2.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = task.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (task.completed) 
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f) 
-                    else 
-                        MaterialTheme.colorScheme.onSurface,
-                    textDecoration = if (task.completed) TextDecoration.LineThrough else null
+                // Add checkbox
+                Checkbox(
+                    checked = task.completed,
+                    onCheckedChange = { isChecked ->
+                        onCompletedChange(isChecked)
+                    },
+                    modifier = Modifier.padding(top = 2.dp, end = 8.dp)
                 )
 
-                if (task.description.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
+                // Priority indicator
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .size(12.dp)
+                        .background(task.priority.color, CircleShape)
+                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                // Task details
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 2.dp)
+                ) {
                     Text(
-                        text = task.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
+                        text = task.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (task.completed) 
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f) 
+                        else 
+                            MaterialTheme.colorScheme.onSurface,
+                        textDecoration = if (task.completed) TextDecoration.LineThrough else null
                     )
+
+                    if (task.description.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = task.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Display tracked time below description
+                    if (task.trackedTimeMillis > 0 || task.isTracking) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        // Use the separate timer composable that will recompose independently
+                        TaskTimer(task = task, currentTimeMillis = currentTimeMillis)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        
+                        // Show list name if available
+                        task.list?.let { listName ->
+                            Text(
+                                text = listName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                 }
 
-                // Display tracked time below description
-                if (task.trackedTimeMillis > 0 || task.isTracking) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    // Use the separate timer composable that will recompose independently
-                    TaskTimer(task = task, currentTimeMillis = currentTimeMillis)
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
+                // Action buttons
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Remove date section
-                    
-                    // Show list name if available
-                    task.list?.let { listName ->
-                        Text(
-                            text = listName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
+                    // Play/Pause button with improved clickability
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                color = if (task.isTracking) 
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) 
+                                else 
+                                    Color.Transparent,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                Log.d("TaskCard", "Play/Pause clicked directly for task: ${task.name}, current tracking: ${task.isTracking}")
+                                onTrackingToggle(!task.isTracking)
+                            }
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (task.isTracking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (task.isTracking) "Stop Tracking" else "Start Tracking",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    
-                    // Show image attachment indicator
-                    if (task.imagePath != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Add, // Would be ideal to use an image icon
-                                contentDescription = "Image Attached",
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(
-                                text = "Image",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-                    
-                    // Show file attachment indicator
-                    if (task.filePath != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Add, // Would be ideal to use a file/document icon
-                                contentDescription = "File Attached",
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(
-                                text = "File",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 10.sp
-                            )
-                        }
+
+                    // Delete button
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Delete Task",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
-
-            // Action buttons
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Play/Pause button with improved clickability
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            color = if (task.isTracking) 
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) 
-                            else 
-                                Color.Transparent,
-                            shape = CircleShape
-                        )
-                        .clickable {
-                            Log.d("TaskCard", "Play/Pause clicked directly for task: ${task.name}, current tracking: ${task.isTracking}")
-                            onTrackingToggle(!task.isTracking)
-                        }
-                        .padding(8.dp),
-                    contentAlignment = Alignment.Center
+            
+            // Display image attachment if available
+            if (task.imagePath != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
                 ) {
-                    Icon(
-                        imageVector = if (task.isTracking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (task.isTracking) "Stop Tracking" else "Start Tracking",
-                        tint = MaterialTheme.colorScheme.primary
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(task.imagePath)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Attached Image",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
                     )
                 }
-
-                // Delete button
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Delete Task",
-                        tint = MaterialTheme.colorScheme.error
+            }
+            
+            // Display file attachment if available
+            if (task.filePath != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings, // Using Settings as a placeholder for a document icon
+                            contentDescription = "File Attachment",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        // Extract the file name from the path
+                        val fileName = remember(task.filePath) {
+                            task.filePath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "Attached File"
+                        }
+                        
+                        Text(
+                            text = fileName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
