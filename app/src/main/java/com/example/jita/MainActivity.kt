@@ -1611,26 +1611,29 @@ fun MainScreen(
                             }
                         }
                     }
-                    
-                    // Show attachment status
-                    Row(
+
+// Show attachment status
+                    Column(  // Changed from Row to Column
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
+                        horizontalAlignment = Alignment.Start
                     ) {
                         val currentImagePath = newTaskImagePath
                         val currentFilePath = newTaskFilePath
-                        
+
                         if (currentImagePath != null) {
                             Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(end = 8.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 4.dp)
                             ) {
-                    Text(
+                                Text(
                                     text = currentImagePath.substringAfterLast('/'),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 IconButton(
                                     onClick = { newTaskImagePath = null },
@@ -1645,15 +1648,19 @@ fun MainScreen(
                                 }
                             }
                         }
-                        
+
                         if (currentFilePath != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text(
                                     text = currentFilePath.substringAfterLast('/'),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 IconButton(
                                     onClick = { newTaskFilePath = null },
