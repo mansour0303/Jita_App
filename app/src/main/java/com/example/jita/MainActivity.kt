@@ -2,6 +2,7 @@ package com.example.jita
 
 //import androidx.compose.material3.AsyncImagePainter
 import android.Manifest
+import android.app.Activity // <<< Add this import
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -158,6 +159,8 @@ import java.io.File
 import java.io.FileOutputStream
 import android.content.Intent
 import androidx.core.content.FileProvider
+import java.io.IOException
+import java.io.InputStream
 
 
 // Define navigation routes
@@ -2979,6 +2982,23 @@ fun TaskCard(
     val dateFormatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
     val context = LocalContext.current
 
+    // Use StartActivityForResult to have more control over the save intent
+    val downloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { destinationUri ->
+                // Decide which file to download based on which path is available
+                val sourcePath = task.filePath ?: task.imagePath
+                if (sourcePath != null) {
+                    handleDownload(context, sourcePath, destinationUri)
+                } else {
+                    Toast.makeText(context, "No attachment source found", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     // Create a separate composable for the timer to ensure it recomposes independently
     @Composable
     fun TaskTimer(task: Task, currentTimeMillis: Long) {
@@ -3193,6 +3213,7 @@ fun TaskCard(
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                     )
                                 ) {
+                                    Box(contentAlignment = Alignment.TopEnd) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(context)
                                             .data(path)
@@ -3200,10 +3221,36 @@ fun TaskCard(
                                             .build(),
                                         contentDescription = "Attached Image",
                                         contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(150.dp)
-                                    )
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(150.dp)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                // Use downloadLauncher for images
+                                                val fileName = path.substringAfterLast('/')
+                                                // Use the general getMimeType, same as file download
+                                                val mimeType = getMimeType(fileName)
+
+                                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                                    type = mimeType // Use detected or fallback MIME type
+                                                    putExtra(Intent.EXTRA_TITLE, fileName)
+                                                }
+                                                downloadLauncher.launch(intent)
+                                            },
+                                            modifier = Modifier.background(
+                                                color = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
+                                                shape = CircleShape
+                                            )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                                contentDescription = "Download Image", // Keep description generic
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
@@ -3238,8 +3285,29 @@ fun TaskCard(
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
                                         )
+                                        IconButton(
+                                            onClick = {
+                                                // Use downloadLauncher for files
+                                                val fileName = path.substringAfterLast('/')
+                                                val mimeType = getMimeType(fileName) // Get specific or generic mime type
+
+                                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                                    type = mimeType
+                                                    putExtra(Intent.EXTRA_TITLE, fileName)
+                                                }
+                                                downloadLauncher.launch(intent) // <<< Pass the intent object
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                                contentDescription = "Download File",
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -3247,6 +3315,73 @@ fun TaskCard(
                     }
                 }
             }
+        }
+    }
+}
+
+// Add this helper function
+private fun handleDownload(context: Context, sourcePath: String, destinationUri: Uri) {
+    Log.d("Download", "Starting download. Source: $sourcePath, Destination: $destinationUri")
+    var inputStream: InputStream? = null
+    try {
+        // Try opening input stream via ContentResolver first (for content:// URIs)
+        try {
+            inputStream = context.contentResolver.openInputStream(Uri.parse(sourcePath))
+            if (inputStream != null) {
+                Log.d("Download", "Opened source InputStream via ContentResolver for: $sourcePath")
+            } else {
+                Log.w("Download", "ContentResolver returned null InputStream for URI: $sourcePath")
+                // Fallback to File approach if URI parsing worked but stream is null
+                val sourceFile = File(sourcePath)
+                if (sourceFile.exists()) {
+                    inputStream = sourceFile.inputStream()
+                    Log.d("Download", "Opened source InputStream via File fallback for: $sourcePath")
+                } else {
+                    throw IOException("Source file not found at path: $sourcePath")
+                }
+            }
+        } catch (e: Exception) {
+            // If Uri.parse fails or ContentResolver throws, assume it's a direct path
+            Log.w("Download", "Failed to open source via ContentResolver, trying as File: ${e.message}")
+            val sourceFile = File(sourcePath)
+            if (sourceFile.exists()) {
+                inputStream = sourceFile.inputStream()
+                Log.d("Download", "Opened source InputStream via File for: $sourcePath")
+            } else {
+                throw IOException("Source file not found at path: $sourcePath")
+            }
+        }
+
+        // Ensure inputStream is not null before proceeding
+        if (inputStream == null) {
+            throw IOException("Failed to obtain input stream for source: $sourcePath")
+        }
+
+        // Use the obtained input stream
+        inputStream.use { input ->
+            context.contentResolver.openOutputStream(destinationUri)?.use { output ->
+                // Manual byte copy loop instead of input.copyTo(output)
+                val buffer = ByteArray(8192) // Use a reasonably sized buffer (e.g., 8KB)
+                var bytesRead: Int
+                var totalBytesCopied: Long = 0
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    totalBytesCopied += bytesRead
+                }
+                output.flush() // Ensure all buffered data is written
+                Log.d("Download", "Successfully copied $totalBytesCopied bytes manually.")
+                Toast.makeText(context, "File downloaded successfully", Toast.LENGTH_SHORT).show()
+            } ?: throw IOException("Could not open output stream for destination URI") // Add error handling if output stream is null
+        }
+    } catch (e: Exception) {
+        Log.e("Download", "Error downloading file from $sourcePath to $destinationUri", e)
+        Toast.makeText(context, "Download failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    } finally {
+        // Ensure input stream is closed if opened outside the 'use' block (though 'use' should handle it)
+        try {
+            inputStream?.close()
+        } catch (closeException: IOException) {
+            Log.e("Download", "Error closing input stream", closeException)
         }
     }
 }
