@@ -73,14 +73,6 @@ fun NoteEditorScreen(
                     }
                 },
                 actions = {
-                    // Forward navigation button
-                    IconButton(onClick = { /* Forward navigation */ }) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowForward,
-                            contentDescription = "Forward",
-                            tint = Color.Gray
-                        )
-                    }
                     
                     // More options menu
                     IconButton(onClick = { /* Show more options */ }) {
