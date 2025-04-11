@@ -2,6 +2,8 @@ package com.example.jita.data
 
 import androidx.room.TypeConverter
 import com.example.jita.TaskPriority
+import org.json.JSONArray
+import org.json.JSONException
 import java.util.Calendar
 
 class Converters {
@@ -25,5 +27,36 @@ class Converters {
     @TypeConverter
     fun priorityToString(priority: TaskPriority?): String? {
         return priority?.name
+    }
+}
+
+/**
+ * Converter for lists of strings to JSON string representation
+ */
+class StringListConverter {
+    @TypeConverter
+    fun fromString(value: String?): List<String> {
+        if (value.isNullOrEmpty()) return emptyList()
+        
+        return try {
+            val jsonArray = JSONArray(value)
+            val stringList = mutableListOf<String>()
+            
+            for (i in 0 until jsonArray.length()) {
+                stringList.add(jsonArray.getString(i))
+            }
+            stringList
+        } catch (e: JSONException) {
+            emptyList()
+        }
+    }
+    
+    @TypeConverter
+    fun fromList(list: List<String>?): String {
+        if (list.isNullOrEmpty()) return "[]"
+        
+        val jsonArray = JSONArray()
+        list.forEach { jsonArray.put(it) }
+        return jsonArray.toString()
     }
 } 

@@ -1,6 +1,4 @@
 package com.example.jita
-
-//import androidx.compose.material3.AsyncImagePainter
 import android.Manifest
 import android.app.Activity // <<< Add this import
 import android.content.Context
@@ -57,13 +55,13 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -161,6 +159,7 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import java.io.IOException
 import java.io.InputStream
+import androidx.compose.material.icons.filled.Description
 
 
 // Define navigation routes
@@ -198,8 +197,8 @@ fun Task.toTaskEntity(): TaskEntity {
         isTracking = this.isTracking,
         trackingStartTime = this.trackingStartTime,
         completed = this.completed,  // Add completed flag
-        imagePath = this.imagePath,
-        filePath = this.filePath
+        imagePaths = this.imagePaths,
+        filePaths = this.filePaths
     )
 }
 
@@ -215,6 +214,15 @@ fun getFileNameFromUri(context: Context, uri: Uri): String? {
         }
     }
     return fileName
+}
+
+// Helper extension function to convert JSONArray to List
+fun JSONArray.toList(): List<Any> {
+    val list = mutableListOf<Any>()
+    for (i in 0 until this.length()) {
+        list.add(this.get(i))
+    }
+    return list
 }
 
 class MainActivity : ComponentActivity() {
@@ -264,8 +272,8 @@ class MainActivity : ComponentActivity() {
                         trackedTimeMillis = entity.trackedTimeMillis,
                         trackingStartTime = entity.trackingStartTime,
                         completed = entity.completed,  // Add completed flag
-                        imagePath = entity.imagePath,
-                        filePath = entity.filePath
+                        imagePaths = entity.imagePaths,
+                        filePaths = entity.filePaths
                     )
                 }.toMutableStateList()
             }
@@ -897,8 +905,8 @@ fun MainScreen(
     var newTaskDate by rememberSaveable { mutableStateOf(Calendar.getInstance()) } // Keep Calendar instance
     var newTaskPriority by rememberSaveable { mutableStateOf(TaskPriority.MEDIUM) }
     var newTaskList by rememberSaveable { mutableStateOf<String?>(null) }
-    var newTaskImagePath by rememberSaveable { mutableStateOf<String?>(null) } // Add for image path
-    var newTaskFilePath by rememberSaveable { mutableStateOf<String?>(null) } // Add for file path
+    var newTaskImagePaths by rememberSaveable { mutableStateOf<List<String>>(emptyList()) } // Changed to list
+    var newTaskFilePaths by rememberSaveable { mutableStateOf<List<String>>(emptyList()) } // Changed to list
     var showDatePicker by remember { mutableStateOf(false) }
     var isListDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -946,7 +954,8 @@ fun MainScreen(
                         input.copyTo(output)
                     }
                 }
-                newTaskImagePath = targetFile.absolutePath
+                // Add to list instead of replacing
+                newTaskImagePaths = newTaskImagePaths + targetFile.absolutePath
                 Toast.makeText(context, "Image attached successfully", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Log.e("ImagePicker", "Error copying image", e)
@@ -974,7 +983,8 @@ fun MainScreen(
                         input.copyTo(output)
                     }
                 }
-                newTaskFilePath = targetFile.absolutePath
+                // Add to list instead of replacing
+                newTaskFilePaths = newTaskFilePaths + targetFile.absolutePath
                 Toast.makeText(context, "File attached successfully", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Log.e("FilePicker", "Error copying file", e)
@@ -1319,6 +1329,9 @@ fun MainScreen(
                                         newTaskDate = task.dueDate.clone() as Calendar
                                         newTaskPriority = task.priority
                                         newTaskList = task.list
+                                        // Initialize attachment paths with current task data
+                                        newTaskImagePaths = task.imagePaths
+                                        newTaskFilePaths = task.filePaths
                                         showEditTaskDialog = true
                                     },
                                     onClick = {
@@ -1622,61 +1635,163 @@ fun MainScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.Start
                     ) {
-                        val currentImagePath = newTaskImagePath
-                        val currentFilePath = newTaskFilePath
+                        val currentImagePaths = newTaskImagePaths
+                        val currentFilePaths = newTaskFilePaths
 
-                        if (currentImagePath != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 4.dp)
-                            ) {
-                                Text(
-                                    text = currentImagePath.substringAfterLast('/'),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = { newTaskImagePath = null },
-                                    modifier = Modifier.size(20.dp)
+                        // Display images
+                        if (currentImagePaths.isNotEmpty()) {
+                            Text(
+                                text = "Attached Images:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                            )
+                            
+                            // List all images with individual delete buttons
+                            currentImagePaths.forEachIndexed { index, path ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = "Remove Image",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
+                                    Text(
+                                        text = path.substringAfterLast('/'),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
+                                    IconButton(
+                                        onClick = { 
+                                            // Remove only this specific image
+                                            newTaskImagePaths = newTaskImagePaths.filterIndexed { i, _ -> i != index }
+                                            Log.d("AddTask", "Removed image at index $index, remaining: ${newTaskImagePaths.size}")
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Remove Image",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Add "Remove All" button if there are multiple images
+                            if (currentImagePaths.size > 1) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp)
+                                ) {
+                                    TextButton(
+                                        onClick = { 
+                                            Log.d("AddTask", "Clearing all images, before: $newTaskImagePaths")
+                                            newTaskImagePaths = emptyList() 
+                                            Log.d("AddTask", "After clearing: $newTaskImagePaths")
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Remove All Images",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Remove All",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                         }
 
-                        if (currentFilePath != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = currentFilePath.substringAfterLast('/'),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = { newTaskFilePath = null },
-                                    modifier = Modifier.size(20.dp)
+                        // Display files
+                        if (currentFilePaths.isNotEmpty()) {
+                            Text(
+                                text = "Attached Files:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                            )
+                            
+                            // List all files with individual delete buttons
+                            currentFilePaths.forEachIndexed { index, path ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = "Remove File",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
+                                    Text(
+                                        text = path.substringAfterLast('/'),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
+                                    IconButton(
+                                        onClick = { 
+                                            // Remove only this specific file
+                                            newTaskFilePaths = newTaskFilePaths.filterIndexed { i, _ -> i != index }
+                                            Log.d("AddTask", "Removed file at index $index, remaining: ${newTaskFilePaths.size}")
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Remove File",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Add "Remove All" button if there are multiple files
+                            if (currentFilePaths.size > 1) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp)
+                                ) {
+                                    TextButton(
+                                        onClick = { 
+                                            Log.d("AddTask", "Clearing all files, before: $newTaskFilePaths")
+                                            newTaskFilePaths = emptyList() 
+                                            Log.d("AddTask", "After clearing: $newTaskFilePaths")
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Remove All Files",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Remove All",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1694,14 +1809,14 @@ fun MainScreen(
                                 dueDate = newTaskDate.clone() as Calendar, // Clone to avoid mutation issues
                                 priority = newTaskPriority,
                                 list = newTaskList,
-                                imagePath = newTaskImagePath,
-                                filePath = newTaskFilePath
+                                imagePaths = newTaskImagePaths,  // Changed from single path to list
+                                filePaths = newTaskFilePaths    // Changed from single path to list
                             )
                             onAddTask(newTask) // Call the callback to handle DB insertion
                             showAddTaskDialog = false
                             // Reset attachment paths for next time
-                            newTaskImagePath = null
-                            newTaskFilePath = null
+                            newTaskImagePaths = emptyList()
+                            newTaskFilePaths = emptyList()
                         }
                     },
                     enabled = newTaskName.isNotBlank(), // Basic validation
@@ -1726,17 +1841,18 @@ fun MainScreen(
         var timeError by remember { mutableStateOf<String?>(null) }
         
         // Add state for attachment paths - Initialized from the task being edited
-        var editedImagePath by remember(taskToEdit) { mutableStateOf(taskToEdit!!.imagePath) }
-        var editedFilePath by remember(taskToEdit) { mutableStateOf(taskToEdit!!.filePath) }
-        // newTaskImagePath and newTaskFilePath are still used for *newly selected* files via the pickers
+        var editedImagePaths by remember(taskToEdit) { mutableStateOf(taskToEdit!!.imagePaths) }
+        var editedFilePaths by remember(taskToEdit) { mutableStateOf(taskToEdit!!.filePaths) }
+        // newTaskImagePaths and newTaskFilePaths are still used for *newly selected* files via the pickers
 
         AlertDialog(
             onDismissRequest = {
+                Log.d("EditTask", "Dismissing dialog, resetting state")
                 showEditTaskDialog = false
-                taskToEdit = null // Resets editedImagePath/editedFilePath via remember key change
+                taskToEdit = null // Resets editedImagePaths/editedFilePaths via remember key change
                 // Reset temporary picker state used by Add/Edit dialogs
-                newTaskImagePath = null
-                newTaskFilePath = null
+                newTaskImagePaths = emptyList()
+                newTaskFilePaths = emptyList()
             },
             containerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -1972,11 +2088,11 @@ fun MainScreen(
                     // Show attachment status and remove buttons
                     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) { // Align Start
                         // Image attachment status and remove button
-                        val currentImagePath = newTaskImagePath ?: editedImagePath // Determine currently active path
-                        if (currentImagePath != null) {
+                        val currentImagePaths = newTaskImagePaths ?: editedImagePaths // Determine currently active paths
+                        if (currentImagePaths.isNotEmpty()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    "Image: ${currentImagePath.substringAfterLast('/')}", // Show filename
+                                    "Attached Images:", // Show filenames
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     maxLines = 1,
@@ -1985,14 +2101,16 @@ fun MainScreen(
                                 )
                                 IconButton(
                                     onClick = {
-                                        newTaskImagePath = null // Clear newly selected image if any
-                                        editedImagePath = null  // Clear existing/edited image path
+                                        Log.d("EditTask", "Clearing images, before new: $newTaskImagePaths, before edited: $editedImagePaths")
+                                        newTaskImagePaths = emptyList() // Clear newly selected images if any
+                                        editedImagePaths = emptyList()  // Clear existing/edited image paths
+                                        Log.d("EditTask", "After clearing, new: $newTaskImagePaths, edited: $editedImagePaths")
                                     },
                                     modifier = Modifier.size(32.dp) // Touch target size
                                 ) {
                                     Icon(
                                         Icons.Filled.Delete,
-                                        contentDescription = "Remove Image",
+                                        contentDescription = "Remove Images",
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(20.dp) // Icon size
                                     )
@@ -2001,11 +2119,11 @@ fun MainScreen(
                         }
 
                         // File attachment status and remove button
-                        val currentFilePath = newTaskFilePath ?: editedFilePath // Determine currently active path
-                        if (currentFilePath != null) {
+                        val currentFilePaths = newTaskFilePaths ?: editedFilePaths // Determine currently active paths
+                        if (currentFilePaths.isNotEmpty()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    "File: ${currentFilePath.substringAfterLast('/')}", // Show filename
+                                    "Attached Files:", // Show filenames
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     maxLines = 1,
@@ -2014,14 +2132,16 @@ fun MainScreen(
                                 )
                                 IconButton(
                                     onClick = {
-                                        newTaskFilePath = null // Clear newly selected file if any
-                                        editedFilePath = null  // Clear existing/edited file path
+                                        Log.d("EditTask", "Clearing files, before new: $newTaskFilePaths, before edited: $editedFilePaths")
+                                        newTaskFilePaths = emptyList() // Clear newly selected files if any
+                                        editedFilePaths = emptyList()  // Clear existing/edited file paths
+                                        Log.d("EditTask", "After clearing, new: $newTaskFilePaths, edited: $editedFilePaths")
                                     },
                                     modifier = Modifier.size(32.dp) // Touch target size
                                 ) {
                                     Icon(
                                         Icons.Filled.Delete,
-                                        contentDescription = "Remove File",
+                                        contentDescription = "Remove Files",
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(20.dp) // Icon size
                                     )
@@ -2067,6 +2187,8 @@ fun MainScreen(
                             // Parse the edited time string to milliseconds
                             val timeMillis = parseTimeToMillis(editedTimeString)
 
+                            Log.d("EditTask", "Saving task with imagePaths: $newTaskImagePaths, filePaths: $newTaskFilePaths")
+                            
                             // Create updated Task object with the same ID
                             val updatedTask = Task(
                                 id = taskToEdit!!.id, // Keep the same ID
@@ -2079,8 +2201,8 @@ fun MainScreen(
                                 isTracking = taskToEdit!!.isTracking,
                                 trackingStartTime = taskToEdit!!.trackingStartTime,
                                 completed = taskToEdit!!.completed,
-                                imagePath = newTaskImagePath ?: editedImagePath, // Use new image if selected, otherwise use edited (which might be null now)
-                                filePath = newTaskFilePath ?: editedFilePath    // Use new file if selected, otherwise use edited (which might be null now)
+                                imagePaths = newTaskImagePaths, // Use new images if selected, otherwise use edited (which might be null now)
+                                filePaths = newTaskFilePaths    // Use new files if selected, otherwise use edited (which might be null now)
                             )
 
                             // Delete the old task and add the updated one
@@ -2089,6 +2211,9 @@ fun MainScreen(
 
                             showEditTaskDialog = false
                             taskToEdit = null
+                            // Reset temporary picker state
+                            newTaskImagePaths = emptyList()
+                            newTaskFilePaths = emptyList()
                         }
                     },
                     enabled = newTaskName.isNotBlank() && timeError == null,
@@ -2098,11 +2223,12 @@ fun MainScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
+                        Log.d("EditTask", "Cancel button clicked, resetting state")
                         showEditTaskDialog = false
-                        taskToEdit = null // Resets editedImagePath/editedFilePath
+                        taskToEdit = null // Resets editedImagePaths/editedFilePaths
                         // Reset temporary picker state
-                        newTaskImagePath = null
-                        newTaskFilePath = null
+                        newTaskImagePaths = emptyList()
+                        newTaskFilePaths = emptyList()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) { Text("Cancel") }
@@ -2916,9 +3042,9 @@ data class Task(
     val isTracking: Boolean = false,
     val trackedTimeMillis: Long = 0,
     val trackingStartTime: Long = 0,
-    val completed: Boolean = false,  // Add completed flag
-    val imagePath: String? = null,
-    val filePath: String? = null
+    val completed: Boolean = false,
+    val imagePaths: List<String> = emptyList(),  // Changed from single path to list
+    val filePaths: List<String> = emptyList()    // Changed from single path to list
 )
 
 // Task priority enum
@@ -2981,6 +3107,8 @@ fun TaskCard(
 ) {
     val dateFormatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
     val context = LocalContext.current
+    // Add missing variable to store current download source path
+    var currentDownloadSource by remember { mutableStateOf<String?>(null) }
 
     // Use StartActivityForResult to have more control over the save intent
     val downloadLauncher = rememberLauncherForActivityResult(
@@ -2989,7 +3117,7 @@ fun TaskCard(
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { destinationUri ->
                 // Decide which file to download based on which path is available
-                val sourcePath = task.filePath ?: task.imagePath
+                val sourcePath = task.filePaths.firstOrNull() ?: task.imagePaths.firstOrNull()
                 if (sourcePath != null) {
                     handleDownload(context, sourcePath, destinationUri)
                 } else {
@@ -3167,7 +3295,7 @@ fun TaskCard(
             }
 
 
-            val hasAttachments = task.imagePath != null || task.filePath != null
+            val hasAttachments = task.imagePaths.isNotEmpty() || task.filePaths.isNotEmpty()
             var attachmentsExpanded by remember { mutableStateOf(false) }
 
             if (hasAttachments) {
@@ -3200,113 +3328,125 @@ fun TaskCard(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Image attachment
-                            task.imagePath?.let { path ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            // Open image when clicked
-                                            openImageFile(context, path)
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    )
+                            // Images section
+                            if (task.imagePaths.isNotEmpty()) {
+                                Text(
+                                    "Images:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Box(contentAlignment = Alignment.TopEnd) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(path)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = "Attached Image",
-                                        contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(150.dp)
-                                        )
-                                        IconButton(
-                                            onClick = {
-                                                // Use downloadLauncher for images
-                                                val fileName = path.substringAfterLast('/')
-                                                // Use the general getMimeType, same as file download
-                                                val mimeType = getMimeType(fileName)
+                                    items(task.imagePaths) { path ->
+                                        Box(contentAlignment = Alignment.TopEnd) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(context)
+                                                    .data(path)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = "Attached Image",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .size(120.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clickable { openImageFile(context, path) }
+                                            )
+                                            
+                                            IconButton(
+                                                onClick = {
+                                                    val fileName = path.substringAfterLast('/')
+                                                    val mimeType = getMimeType(fileName)
 
-                                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                                    type = mimeType // Use detected or fallback MIME type
-                                                    putExtra(Intent.EXTRA_TITLE, fileName)
-                                                }
-                                                downloadLauncher.launch(intent)
-                                            },
-                                            modifier = Modifier.background(
-                                                color = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
-                                                shape = CircleShape
-                                            )
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                                contentDescription = "Download Image", // Keep description generic
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
+                                                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                                        addCategory(Intent.CATEGORY_OPENABLE)
+                                                        type = mimeType
+                                                        putExtra(Intent.EXTRA_TITLE, fileName)
+                                                    }
+                                                    downloadLauncher.launch(intent)
+                                                    currentDownloadSource = path
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Download,
+                                                    contentDescription = "Download Image",
+                                                    tint = Color.White,
+                                                    modifier = Modifier
+                                                        .background(
+                                                            color = Color.Black.copy(alpha = 0.5f),
+                                                            shape = CircleShape
+                                                        )
+                                                        .padding(4.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-
-                            // File attachment
-                            task.filePath?.let { path ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            // Open file when clicked
-                                            openFile(context, path)
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    )
+                            
+                            // Files section
+                            if (task.filePaths.isNotEmpty()) {
+                                Text(
+                                    "Files:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Settings,
-                                            contentDescription = "File Attachment",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = path.substringAfterLast('/'),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        IconButton(
-                                            onClick = {
-                                                // Use downloadLauncher for files
-                                                val fileName = path.substringAfterLast('/')
-                                                val mimeType = getMimeType(fileName) // Get specific or generic mime type
-
-                                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                                    type = mimeType
-                                                    putExtra(Intent.EXTRA_TITLE, fileName)
-                                                }
-                                                downloadLauncher.launch(intent) // <<< Pass the intent object
-                                            }
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                                contentDescription = "Download File",
-                                                tint = MaterialTheme.colorScheme.primary
+                                    task.filePaths.forEach { path ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { openFile(context, path) },
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant
                                             )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Description,
+                                                    contentDescription = "File Attachment",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = path.substringAfterLast('/'),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                IconButton(
+                                                    onClick = {
+                                                        val fileName = path.substringAfterLast('/')
+                                                        val mimeType = getMimeType(fileName)
+                                                        
+                                                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                                            addCategory(Intent.CATEGORY_OPENABLE)
+                                                            type = mimeType
+                                                            putExtra(Intent.EXTRA_TITLE, fileName)
+                                                        }
+                                                        downloadLauncher.launch(intent)
+                                                        currentDownloadSource = path
+                                                    }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Download,
+                                                        contentDescription = "Download File",
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -3993,8 +4133,8 @@ fun BackupScreen(
                         put("isTracking", task.isTracking)
                         put("trackingStartTime", task.trackingStartTime)
                         put("completed", task.completed)
-                        put("imagePath", task.imagePath ?: JSONObject.NULL)
-                        put("filePath", task.filePath ?: JSONObject.NULL)
+                        put("imagePaths", task.imagePaths.map { JSONObject.NULL.toString() })
+                        put("filePaths", task.filePaths.map { JSONObject.NULL.toString() })
                     })
                 }
                 put("tasks", tasksArray)
@@ -4230,11 +4370,11 @@ fun RestoreScreen(
                     val isCompleted = if (taskObj.has("completed")) 
                         taskObj.getBoolean("completed") else false
                     
-                    val imagePath = if (taskObj.has("imagePath") && !taskObj.isNull("imagePath"))
-                        taskObj.getString("imagePath") else null
+                    val imagePaths = if (taskObj.has("imagePaths") && !taskObj.isNull("imagePaths"))
+                        taskObj.getJSONArray("imagePaths").toList().map { it.toString() } else emptyList()
                         
-                    val filePath = if (taskObj.has("filePath") && !taskObj.isNull("filePath"))
-                        taskObj.getString("filePath") else null
+                    val filePaths = if (taskObj.has("filePaths") && !taskObj.isNull("filePaths"))
+                        taskObj.getJSONArray("filePaths").toList().map { it.toString() } else emptyList()
                     
                     if (isCompleted) completedTaskCount++
                     
@@ -4250,8 +4390,8 @@ fun RestoreScreen(
                             isTracking = taskObj.getBoolean("isTracking"),
                             trackingStartTime = taskObj.getLong("trackingStartTime"),
                             completed = isCompleted,
-                            imagePath = imagePath,
-                            filePath = filePath
+                            imagePaths = imagePaths,
+                            filePaths = filePaths
                         )
                     )
                 }

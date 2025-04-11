@@ -8,5 +8,7 @@ data class Task(
     val trackedTimeMillis: Long = 0,
     val isTracking: Boolean = false,
     val trackingStartTime: Long = 0,
-    val completed: Boolean = false
+    val completed: Boolean = false,
+    val imagePaths: List<String> = emptyList(),
+    val filePaths: List<String> = emptyList()
 ) 
