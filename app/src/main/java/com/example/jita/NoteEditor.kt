@@ -153,6 +153,8 @@ fun NoteEditorScreen(
                             try {
                                 withFontSize.copy(color = Color(android.graphics.Color.parseColor(style.textColor)))
                             } catch (e: Exception) {
+                                // If color parsing fails, continue with other styles
+                                android.util.Log.e("NoteEditor", "Error parsing text color: ${e.message}")
                                 withFontSize
                             }
                         } else {
@@ -164,6 +166,8 @@ fun NoteEditorScreen(
                             try {
                                 withTextColor.copy(background = Color(android.graphics.Color.parseColor(style.backgroundColor)))
                             } catch (e: Exception) {
+                                // If color parsing fails, continue with other styles
+                                android.util.Log.e("NoteEditor", "Error parsing background color: ${e.message}")
                                 withTextColor
                             }
                         } else {
@@ -178,6 +182,7 @@ fun NoteEditorScreen(
                         )
                     } catch (e: Exception) {
                         // If there's any error applying a style, skip it
+                        android.util.Log.e("NoteEditor", "Error applying style: ${e.message}")
                         continue
                     }
                 }
@@ -402,19 +407,24 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
         
-        // Convert color to hex format
-        val colorHex = String.format("#%08X", color.toArgb())
+        try {
+            // Convert color to hex format
+            val colorHex = String.format("#%08X", color.toArgb())
 
-        // Check if we need to toggle on or off
-        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
-        val shouldToggleOff = existingStyle?.textColor == colorHex
+            // Check if we need to toggle on or off
+            val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+            val shouldToggleOff = existingStyle?.textColor == colorHex
 
-        // Record the applied style with toggle behavior
-        recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(textColor = if (shouldToggleOff) null else colorHex)
+            // Record the applied style with toggle behavior
+            recordStyle(selectionStart, selectionEnd) { styleInfo ->
+                styleInfo.copy(textColor = if (shouldToggleOff) null else colorHex)
+            }
+
+            textColor = color
+        } catch (e: Exception) {
+            // Log error but don't crash
+            android.util.Log.e("NoteEditor", "Error applying text color: ${e.message}")
         }
-
-        textColor = color
     }
 
     fun applyHighlight(color: Color) {
@@ -423,19 +433,24 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
         
-        // Convert color to hex format (with alpha)
-        val colorHex = String.format("#%08X", color.toArgb())
+        try {
+            // Convert color to hex format (with alpha)
+            val colorHex = String.format("#%08X", color.toArgb())
 
-        // Check if we need to toggle on or off
-        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
-        val shouldToggleOff = existingStyle?.backgroundColor == colorHex
+            // Check if we need to toggle on or off
+            val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+            val shouldToggleOff = existingStyle?.backgroundColor == colorHex
 
-        // Record the applied style with toggle behavior
-        recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(backgroundColor = if (shouldToggleOff) null else colorHex)
+            // Record the applied style with toggle behavior
+            recordStyle(selectionStart, selectionEnd) { styleInfo ->
+                styleInfo.copy(backgroundColor = if (shouldToggleOff) null else colorHex)
+            }
+
+            highlightColor = color
+        } catch (e: Exception) {
+            // Log error but don't crash
+            android.util.Log.e("NoteEditor", "Error applying highlight color: ${e.message}")
         }
-
-        highlightColor = color
     }
 
     // Custom colors for text selection
