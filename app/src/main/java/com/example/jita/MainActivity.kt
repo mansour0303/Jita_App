@@ -934,7 +934,7 @@ fun MainScreen(
         uri?.let { selectedUri ->
             // Copy file to app's files directory
             val fileName = "jita_image_${System.currentTimeMillis()}.jpg"
-            val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "tija_files")
+            val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_files")
             if (!targetDir.exists()) {
                 targetDir.mkdirs()
             }
@@ -962,7 +962,7 @@ fun MainScreen(
         uri?.let { selectedUri ->
             // Get file name from URI
             val fileName = getFileNameFromUri(context, selectedUri) ?: "jita_file_${System.currentTimeMillis()}"
-            val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "tija_files")
+            val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_files")
             if (!targetDir.exists()) {
                 targetDir.mkdirs()
             }
@@ -1130,7 +1130,7 @@ fun MainScreen(
                     TopAppBar(
                         title = {
                             Text(
-                                text = "TIJA",
+                                text = "JITA",
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
                             )
