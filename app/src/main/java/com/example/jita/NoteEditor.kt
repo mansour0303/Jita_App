@@ -2,7 +2,12 @@ package com.example.jita
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +36,12 @@ import java.util.*
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.text.style.TextDecoration
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +58,10 @@ fun NoteEditorScreen(
     // State for note fields
     var title by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
+    
+    // State for formatting toolbar
+    var showFormattingToolbar by remember { mutableStateOf(false) }
+    var currentFontSize by remember { mutableStateOf(16) }
     
     // Track if we've created a default folder
     var defaultFolderId by remember { mutableStateOf<Int?>(null) }
@@ -159,7 +175,10 @@ fun NoteEditorScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Text formatting button (Aa)
-                    IconButton(onClick = { /* Text formatting */ }) {
+                    IconButton(onClick = { 
+                        // Toggle formatting toolbar
+                        showFormattingToolbar = !showFormattingToolbar
+                    }) {
                         Text(
                             text = "Aa",
                             style = TextStyle(
@@ -303,6 +322,17 @@ fun NoteEditorScreen(
                 }
             }
             
+            // Text formatting toolbar
+            AnimatedVisibility(
+                visible = showFormattingToolbar,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                TextFormattingToolbar(currentFontSize) { newSize ->
+                    currentFontSize = newSize
+                }
+            }
+            
             // Title field using BasicTextField for more minimal appearance
             BasicTextField(
                 value = title,
@@ -409,6 +439,241 @@ fun NoteEditorScreen(
     LaunchedEffect(Unit) {
         if (noteId <= 0) {
             titleFocusRequester.requestFocus()
+        }
+    }
+}
+
+@Composable
+private fun TextFormattingToolbar(currentFontSize: Int, onFontSizeChanged: (Int) -> Unit) {
+    val scrollState = rememberScrollState()
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+            .horizontalScroll(scrollState)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Bold
+        IconButton(
+            onClick = { /* Apply bold formatting */ },
+            modifier = Modifier.size(36.dp)
+        ) {
+            Text(
+                text = "B",
+                style = TextStyle(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+            )
+        }
+        
+        // Italic
+        IconButton(
+            onClick = { /* Apply italic formatting */ },
+            modifier = Modifier.size(36.dp)
+        ) {
+            Text(
+                text = "I",
+                style = TextStyle(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    color = Color.Black
+                )
+            )
+        }
+        
+        // Underline
+        IconButton(
+            onClick = { /* Apply underline formatting */ },
+            modifier = Modifier.size(36.dp)
+        ) {
+            Text(
+                text = "U",
+                style = TextStyle(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black,
+                    textDecoration = TextDecoration.Underline
+                )
+            )
+        }
+        
+        // Strikethrough
+        IconButton(
+            onClick = { /* Apply strikethrough formatting */ },
+            modifier = Modifier.size(36.dp)
+        ) {
+            Text(
+                text = "S",
+                style = TextStyle(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black,
+                    textDecoration = TextDecoration.LineThrough
+                )
+            )
+        }
+        
+        // Divider
+        Divider(
+            modifier = Modifier
+                .height(24.dp)
+                .width(1.dp),
+            color = Color.Gray.copy(alpha = 0.3f)
+        )
+        
+        // Font size label with decrease and increase buttons
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Decrease font size
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color.LightGray.copy(alpha = 0.5f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                IconButton(
+                    onClick = { 
+                        if (currentFontSize > 8) {
+                            onFontSizeChanged(currentFontSize - 2)
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "–",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+            
+            // Current font size
+            Text(
+                text = "$currentFontSize",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            
+            // Increase font size
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color.LightGray.copy(alpha = 0.5f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                IconButton(
+                    onClick = { 
+                        if (currentFontSize < 32) {
+                            onFontSizeChanged(currentFontSize + 2)
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "+",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+        
+        // Divider
+        Divider(
+            modifier = Modifier
+                .height(24.dp)
+                .width(1.dp),
+            color = Color.Gray.copy(alpha = 0.3f)
+        )
+        
+        // Text highlight color
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(Color(0xFFFF9800), RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.Black.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+            ) {
+                Text(
+                    text = "A",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+            
+            // Color picker
+            IconButton(
+                onClick = { /* Open highlight color picker */ },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(
+                            brush = Brush.sweepGradient(
+                                listOf(
+                                    Color.Red, Color.Yellow, Color.Green,
+                                    Color.Cyan, Color.Blue, Color.Magenta, Color.Red
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+            }
+        }
+        
+        // Divider
+        Divider(
+            modifier = Modifier
+                .height(24.dp)
+                .width(1.dp),
+            color = Color.Gray.copy(alpha = 0.3f)
+        )
+        
+        // Text color
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "A",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                modifier = Modifier.padding(end = 4.dp)
+            )
+            
+            // Color picker
+            IconButton(
+                onClick = { /* Open text color picker */ },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(
+                            brush = Brush.sweepGradient(
+                                listOf(
+                                    Color.Red, Color.Yellow, Color.Green,
+                                    Color.Cyan, Color.Blue, Color.Magenta, Color.Red
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+            }
         }
     }
 } 
