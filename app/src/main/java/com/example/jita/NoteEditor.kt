@@ -53,13 +53,15 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.graphics.toArgb
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.ui.res.fontResource
+import com.example.jita.R
 
 // Define data classes for tracking rich text without Gson dependency
 data class TextStyleInfo(
@@ -70,7 +72,21 @@ data class TextStyleInfo(
     val isStrikethrough: Boolean = false,
     val fontSize: Int? = null,
     val textColor: String? = null,
-    val backgroundColor: String? = null
+    val backgroundColor: String? = null,
+    val fontName: String? = null
+)
+
+// Define custom fonts
+val TimesRomanFontFamily = FontFamily(
+    Font(R.font.times),
+    Font(R.font.timesbd, FontWeight.Bold),
+    //Font(R.font.timesi, FontStyle.Italic),
+    Font(R.font.timesbi, FontWeight.Bold, FontStyle.Italic)
+)
+
+val SegoePrintFontFamily = FontFamily(
+    Font(R.font.segoepr),
+    Font(R.font.segoeprb, FontWeight.Bold)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,6 +119,7 @@ fun NoteEditorScreen(
     // States for text formatting
     var textColor by remember { mutableStateOf(Color.Black) }
     var highlightColor by remember { mutableStateOf(Color.Transparent) }
+    var currentFontName by remember { mutableStateOf<String?>(null) }
 
     // Track if we've created a default folder
     var defaultFolderId by remember { mutableStateOf<Int?>(null) }
@@ -148,17 +165,43 @@ fun NoteEditorScreen(
                             finalSpanStyle
                         }
                         
-                        // Apply text color separately if it exists
-                        val withTextColor = if (style.textColor != null) {
+                        // Apply font family if it exists
+                        val withFontFamily = if (style.fontName != null) {
                             try {
-                                withFontSize.copy(color = Color(android.graphics.Color.parseColor(style.textColor)))
+                                // Apply custom fonts based on the fontName
+                                val fontFamily = when(style.fontName) {
+                                    "Times" -> TimesRomanFontFamily
+                                    "Segoe Print" -> SegoePrintFontFamily
+                                    "System Sans-serif" -> FontFamily.SansSerif
+                                    "System Serif" -> FontFamily.Serif
+                                    "System Monospace" -> FontFamily.Monospace
+                                    else -> null
+                                }
+                                
+                                if (fontFamily != null) {
+                                    withFontSize.copy(fontFamily = fontFamily)
+                                } else {
+                                    withFontSize
+                                }
                             } catch (e: Exception) {
-                                // If color parsing fails, continue with other styles
-                                android.util.Log.e("NoteEditor", "Error parsing text color: ${e.message}")
+                                android.util.Log.e("NoteEditor", "Error applying font family: ${e.message}")
                                 withFontSize
                             }
                         } else {
                             withFontSize
+                        }
+                        
+                        // Apply text color separately if it exists
+                        val withTextColor = if (style.textColor != null) {
+                            try {
+                                withFontFamily.copy(color = Color(android.graphics.Color.parseColor(style.textColor)))
+                            } catch (e: Exception) {
+                                // If color parsing fails, continue with other styles
+                                android.util.Log.e("NoteEditor", "Error parsing text color: ${e.message}")
+                                withFontFamily
+                            }
+                        } else {
+                            withFontFamily
                         }
                         
                         // Apply background separately if it exists
@@ -208,7 +251,8 @@ fun NoteEditorScreen(
                                 isStrikethrough = json.optBoolean("isStrikethrough"),
                                 fontSize = json.optInt("fontSize").takeIf { it != 0 },
                                 textColor = json.optString("textColor").takeIf { it.isNotEmpty() },
-                                backgroundColor = json.optString("backgroundColor").takeIf { it.isNotEmpty() }
+                                backgroundColor = json.optString("backgroundColor").takeIf { it.isNotEmpty() },
+                                fontName = json.optString("fontName").takeIf { it.isNotEmpty() }
                             )
                         }
                     } ?: emptyList()
@@ -259,6 +303,7 @@ fun NoteEditorScreen(
                         put("fontSize", style.fontSize)
                         put("textColor", style.textColor)
                         put("backgroundColor", style.backgroundColor)
+                        put("fontName", style.fontName)
                     }
                 }).toString()
 
@@ -311,7 +356,8 @@ fun NoteEditorScreen(
                 !updatedStyle.isStrikethrough && 
                 updatedStyle.fontSize == null && 
                 updatedStyle.textColor == null && 
-                updatedStyle.backgroundColor == null) {
+                updatedStyle.backgroundColor == null &&
+                updatedStyle.fontName == null) {
                 updatedStyles.removeAt(existingStyleIndex)
             } else {
                 updatedStyles[existingStyleIndex] = updatedStyle
@@ -451,6 +497,25 @@ fun NoteEditorScreen(
             // Log error but don't crash
             android.util.Log.e("NoteEditor", "Error applying highlight color: ${e.message}")
         }
+    }
+
+    // Add function to apply font change
+    fun applyFont(fontName: String) {
+        if (!isTextSelected) return
+
+        val selectionStart = textFieldValue.selection.start
+        val selectionEnd = textFieldValue.selection.end
+
+        // Check if we need to toggle on or off
+        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val shouldToggleOff = existingStyle?.fontName == fontName
+
+        // Record the applied style with toggle behavior
+        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            styleInfo.copy(fontName = if (shouldToggleOff) null else fontName)
+        }
+
+        currentFontName = if (shouldToggleOff) null else fontName
     }
 
     // Custom colors for text selection
@@ -662,13 +727,15 @@ fun NoteEditorScreen(
                     currentFontSize = currentFontSize,
                     textColor = textColor,
                     highlightColor = highlightColor,
+                    currentFontName = currentFontName,
                     isTextSelected = isTextSelected,
                     onBoldClick = { applyBold() },
                     onUnderlineClick = { applyUnderline() },
                     onStrikethroughClick = { applyStrikethrough() },
                     onFontSizeChanged = { applyFontSize(it) },
                     onTextColorChanged = { applyTextColor(it) },
-                    onHighlightColorChanged = { applyHighlight(it) }
+                    onHighlightColorChanged = { applyHighlight(it) },
+                    onFontChanged = { applyFont(it) }
                 )
             }
 
@@ -757,13 +824,15 @@ private fun TextFormattingToolbar(
     currentFontSize: Int,
     textColor: Color,
     highlightColor: Color,
+    currentFontName: String?,
     isTextSelected: Boolean,
     onBoldClick: () -> Unit,
     onUnderlineClick: () -> Unit,
     onStrikethroughClick: () -> Unit,
     onFontSizeChanged: (Int) -> Unit,
     onTextColorChanged: (Color) -> Unit,
-    onHighlightColorChanged: (Color) -> Unit
+    onHighlightColorChanged: (Color) -> Unit,
+    onFontChanged: (String) -> Unit
 ) {
     val scrollState = rememberScrollState()
 
@@ -772,8 +841,18 @@ private fun TextFormattingToolbar(
         Color.Magenta, Color.Cyan, Color.Yellow, Color.Gray
     )
 
+    // Font options - these should match the font files in your app/src/main/res/font directory
+    val fontOptions = listOf(
+        "Times" to "Times",
+        "Segoe Print" to "Segoe Print",
+        "System Sans-serif" to "System Sans-serif",
+        "System Serif" to "System Serif", 
+        "System Monospace" to "System Monospace"
+    )
+
     var showTextColorPicker by remember { mutableStateOf(false) }
     var showHighlightColorPicker by remember { mutableStateOf(false) }
+    var showFontPicker by remember { mutableStateOf(false) }
 
     Column {
         Row(
@@ -914,6 +993,50 @@ private fun TextFormattingToolbar(
                 color = Color.Gray.copy(alpha = 0.3f)
             )
             
+            // Font selection button (new)
+            Divider(
+                modifier = Modifier
+                    .height(24.dp)
+                    .width(1.dp),
+                color = Color.Gray.copy(alpha = 0.3f)
+            )
+            
+            // Font selector
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Display current font name or "Font"
+                Text(
+                    text = currentFontName ?: "Font",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = if (isTextSelected) Color.Black else Color.Gray,
+                    maxLines = 1,
+                    fontFamily = when(currentFontName) {
+                        "Times" -> TimesRomanFontFamily
+                        "Segoe Print" -> SegoePrintFontFamily
+                        "System Sans-serif" -> FontFamily.SansSerif
+                        "System Serif" -> FontFamily.Serif
+                        "System Monospace" -> FontFamily.Monospace
+                        else -> null
+                    },
+                    modifier = Modifier.width(80.dp)
+                )
+                
+                // Font selection dropdown button
+                IconButton(
+                    onClick = { showFontPicker = !showFontPicker },
+                    modifier = Modifier.size(36.dp),
+                    enabled = isTextSelected
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Select Font",
+                        tint = if (isTextSelected) Color.Black else Color.Gray
+                    )
+                }
+            }
+            
             // Text highlight color
             Row(
                 verticalAlignment = Alignment.CenterVertically
@@ -996,6 +1119,65 @@ private fun TextFormattingToolbar(
                             )
                             .alpha(if (isTextSelected) 1f else 0.5f)
                     )
+                }
+            }
+        }
+        
+        // Font picker dropdown
+        AnimatedVisibility(
+            visible = showFontPicker,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .background(Color.White, RoundedCornerShape(8.dp))
+                    .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+                    .padding(8.dp)
+            ) {
+                fontOptions.forEach { (displayName, fontName) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = isTextSelected) {
+                                if (fontName != null) {
+                                    onFontChanged(fontName)
+                                }
+                                showFontPicker = false
+                            }
+                            .padding(vertical = 8.dp, horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val isSelected = currentFontName == fontName
+                            
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.width(32.dp))
+                        }
+                        
+                        Text(
+                            text = displayName,
+                            fontSize = 16.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Black,
+                            fontFamily = when(fontName) {
+                                "Times" -> TimesRomanFontFamily
+                                "Segoe Print" -> SegoePrintFontFamily
+                                "System Sans-serif" -> FontFamily.SansSerif
+                                "System Serif" -> FontFamily.Serif
+                                "System Monospace" -> FontFamily.Monospace
+                                else -> null
+                            }
+                        )
+                    }
                 }
             }
         }
