@@ -118,6 +118,15 @@ fun NotesScreen(
     var newNoteTitle by rememberSaveable { mutableStateOf("") }
     var newNoteContent by rememberSaveable { mutableStateOf("") }
     var selectedNote by remember { mutableStateOf<Note?>(null) }
+    
+    // Add state for folder editing
+    var showEditFolderDialog by remember { mutableStateOf(false) }
+    var editedFolderName by rememberSaveable { mutableStateOf("") }
+    var folderToEdit by remember { mutableStateOf<FolderEntity?>(null) }
+    
+    // Add state for delete confirmation
+    var showDeleteFolderDialog by remember { mutableStateOf(false) }
+    var folderToDelete by remember { mutableStateOf<FolderEntity?>(null) }
 
     // Function to navigate back to parent folder
     fun navigateUp() {
@@ -224,10 +233,14 @@ fun NotesScreen(
                                 currentFolderId = folder.id
                                 currentFolderName = folder.name
                             },
+                            onEdit = {
+                                folderToEdit = folder
+                                editedFolderName = folder.name
+                                showEditFolderDialog = true
+                            },
                             onDelete = {
-                                scope.launch {
-                                    folderDao.deleteFolder(folder)
-                                }
+                                folderToDelete = folder
+                                showDeleteFolderDialog = true
                             }
                         )
                     }
@@ -293,6 +306,98 @@ fun NotesScreen(
                         onClick = {
                             showAddFolderDialog = false
                             newFolderName = ""
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        // Edit Folder Dialog
+        if (showEditFolderDialog && folderToEdit != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showEditFolderDialog = false
+                    folderToEdit = null
+                    editedFolderName = ""
+                },
+                title = { Text("Edit Folder") },
+                text = {
+                    OutlinedTextField(
+                        value = editedFolderName,
+                        onValueChange = { editedFolderName = it },
+                        label = { Text("Folder Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (editedFolderName.isNotBlank()) {
+                                scope.launch {
+                                    val updatedFolder = folderToEdit!!.copy(name = editedFolderName)
+                                    folderDao.updateFolder(updatedFolder)
+                                    
+                                    // Update currentFolderName if we're editing the current folder
+                                    if (folderToEdit!!.id == currentFolderId) {
+                                        currentFolderName = editedFolderName
+                                    }
+                                    
+                                    showEditFolderDialog = false
+                                    folderToEdit = null
+                                    editedFolderName = ""
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showEditFolderDialog = false
+                            folderToEdit = null
+                            editedFolderName = ""
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+        
+        // Delete Folder Confirmation Dialog
+        if (showDeleteFolderDialog && folderToDelete != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDeleteFolderDialog = false
+                    folderToDelete = null
+                },
+                title = { Text("Delete Folder") },
+                text = { 
+                    Text("Are you sure you want to delete the folder '${folderToDelete!!.name}'? All notes and subfolders will be deleted permanently.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                folderDao.deleteFolder(folderToDelete!!)
+                                showDeleteFolderDialog = false
+                                folderToDelete = null
+                            }
+                        }
+                    ) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteFolderDialog = false
+                            folderToDelete = null
                         }
                     ) {
                         Text("Cancel")
@@ -416,7 +521,12 @@ fun NotesScreen(
 }
 
 @Composable
-fun FolderItem(folder: Folder, onClick: () -> Unit, onDelete: () -> Unit) {
+fun FolderItem(
+    folder: Folder, 
+    onClick: () -> Unit, 
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -441,6 +551,13 @@ fun FolderItem(folder: Folder, onClick: () -> Unit, onDelete: () -> Unit) {
                     .weight(1f)
                     .padding(start = 16.dp)
             )
+            IconButton(onClick = onEdit) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit Folder",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.Delete,
