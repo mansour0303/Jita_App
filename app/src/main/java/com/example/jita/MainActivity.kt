@@ -2,11 +2,14 @@ package com.example.jita
 import android.Manifest
 import android.app.Activity // <<< Add this import
 import android.content.Context
+import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Build.VERSION.SDK_INT
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -155,12 +158,14 @@ import com.example.jita.data.ListNameDao
 import com.example.jita.data.TaskDao
 import java.io.File
 import java.io.FileOutputStream
-import android.content.Intent
 import androidx.core.content.FileProvider
 import java.io.IOException
 import java.io.InputStream
 import androidx.compose.material.icons.filled.Description
 import java.io.FileInputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipFile
 
 
 // Define navigation routes
@@ -4264,9 +4269,9 @@ fun BackupScreen(
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var showExportDialog by remember { mutableStateOf(false) }
     
-    // Create launcher for document creation
+    // Create launcher for document creation - changed to .zip extension
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
+        contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) {
             isExporting = true
@@ -4298,18 +4303,85 @@ fun BackupScreen(
                         put("isTracking", task.isTracking)
                         put("trackingStartTime", task.trackingStartTime)
                         put("completed", task.completed)
-                        put("imagePaths", task.imagePaths.map { JSONObject.NULL.toString() })
-                        put("filePaths", task.filePaths.map { JSONObject.NULL.toString() })
+                        
+                        // Store actual file paths in the JSON
+                        val imagePathsArray = JSONArray()
+                        task.imagePaths.forEach { path ->
+                            imagePathsArray.put(path.substringAfterLast('/'))
+                        }
+                        put("imagePaths", imagePathsArray)
+                        
+                        val filePathsArray = JSONArray()
+                        task.filePaths.forEach { path ->
+                            filePathsArray.put(path.substringAfterLast('/'))
+                        }
+                        put("filePaths", filePathsArray)
                     })
                 }
                 put("tasks", tasksArray)
             }
             
             try {
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                // Create a temporary directory to store files for zipping
+                val tempDir = File(context.cacheDir, "backup_temp")
+                if (tempDir.exists()) {
+                    tempDir.deleteRecursively()
+                }
+                tempDir.mkdirs()
+                
+                // Save JSON data to a file
+                val jsonFile = File(tempDir, "data.json")
+                FileOutputStream(jsonFile).use { outputStream ->
                     outputStream.write(backupData.toString(2).toByteArray())
                 }
-                exportMessage = "Backup successfully saved!"
+                
+                // Copy all attachment files
+                val filesDir = File(tempDir, "files")
+                filesDir.mkdirs()
+                
+                val filesCopied = mutableSetOf<String>()
+                
+                // Copy all task attachments
+                tasks.forEach { task ->
+                    // Copy image files
+                    task.imagePaths.forEach { imagePath ->
+                        val sourceFile = File(imagePath)
+                        if (sourceFile.exists()) {
+                            val destFile = File(filesDir, sourceFile.name)
+                            sourceFile.copyTo(destFile, overwrite = true)
+                            filesCopied.add(sourceFile.name)
+                        }
+                    }
+                    
+                    // Copy other files
+                    task.filePaths.forEach { filePath ->
+                        val sourceFile = File(filePath)
+                        if (sourceFile.exists()) {
+                            val destFile = File(filesDir, sourceFile.name)
+                            sourceFile.copyTo(destFile, overwrite = true)
+                            filesCopied.add(sourceFile.name)
+                        }
+                    }
+                }
+                
+                // Create ZIP file
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    ZipOutputStream(outputStream.buffered()).use { zipOut ->
+                        // Add JSON file to ZIP
+                        addFileToZip(zipOut, jsonFile, "data.json")
+                        
+                        // Add all files in the files directory
+                        val filesInDir = filesDir.listFiles()
+                        filesInDir?.forEach { file ->
+                            addFileToZip(zipOut, file, "files/${file.name}")
+                        }
+                    }
+                }
+                
+                // Clean up temp directory
+                tempDir.deleteRecursively()
+                
+                exportMessage = "Backup successfully saved with ${filesCopied.size} attachments!"
             } catch (e: Exception) {
                 Log.e("BackupScreen", "Error exporting data", e)
                 exportMessage = "Error: ${e.localizedMessage}"
@@ -4359,7 +4431,7 @@ fun BackupScreen(
             
             // Description
             Text(
-                text = "Create a backup of all your lists and tasks. The backup will be saved as a JSON file that you can use to restore your data later.",
+                text = "Create a backup of all your lists, tasks and attachments. The backup will be saved as a ZIP file that you can use to restore your data later.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
@@ -4428,7 +4500,7 @@ fun BackupScreen(
                 onClick = {
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
                         .format(Date())
-                    createDocumentLauncher.launch("JITA_Backup_$timestamp.json")
+                    createDocumentLauncher.launch("JITA_Backup_$timestamp.zip")
                 },
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
@@ -4477,6 +4549,22 @@ fun BackupScreen(
     }
 }
 
+// Helper function to add a file to a ZIP
+private fun addFileToZip(zipOut: ZipOutputStream, file: File, entryPath: String) {
+    FileInputStream(file).use { fis ->
+        val zipEntry = ZipEntry(entryPath)
+        zipOut.putNextEntry(zipEntry)
+        
+        val buffer = ByteArray(1024)
+        var length: Int
+        while (fis.read(buffer).also { length = it } > 0) {
+            zipOut.write(buffer, 0, length)
+        }
+        
+        zipOut.closeEntry()
+    }
+}
+
 // Add the RestoreScreen composable
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -4491,9 +4579,10 @@ fun RestoreScreen(
     var isImporting by remember { mutableStateOf(false) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
-    var importStats by remember { mutableStateOf(Triple(0, 0, 0)) } // lists, tasks, completed tasks
+    // Updated to store lists, tasks, completed tasks, and attachments
+    var importStats by remember { mutableStateOf(Tuple4(0, 0, 0, 0)) }
     
-    // Create launcher for document selection
+    // Create launcher for document selection - updated to support ZIP files
     val openDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -4502,12 +4591,54 @@ fun RestoreScreen(
             importMessage = null
             
             try {
-                // Read the JSON file
-                val jsonString = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    inputStream.bufferedReader().use { it.readText() }
-                } ?: throw Exception("Could not read file")
+                // Create temporary directory to extract files
+                val tempDir = File(context.cacheDir, "restore_temp")
+                if (tempDir.exists()) {
+                    tempDir.deleteRecursively()
+                }
+                tempDir.mkdirs()
                 
+                // Create a directory for extracted files
+                val extractedFilesDir = File(tempDir, "files")
+                extractedFilesDir.mkdirs()
+                
+                // Create a temp file for the zip
+                val zipFile = File(tempDir, "backup.zip")
+                
+                // Copy the ZIP file to temporary location
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(zipFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                
+                // Extract the ZIP contents
+                extractZipFile(zipFile, tempDir)
+                
+                // Read the extracted JSON file
+                val jsonFile = File(tempDir, "data.json")
+                if (!jsonFile.exists()) {
+                    throw Exception("Invalid backup file: Missing data.json")
+                }
+                
+                val jsonString = jsonFile.readText()
                 val jsonObject = JSONObject(jsonString)
+                
+                // Prepare target directory for restored files
+                val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_files")
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
+                
+                // Move extracted files to app's storage
+                val extractedFiles = File(tempDir, "files").listFiles() ?: emptyArray()
+                val restoredFiles = mutableMapOf<String, String>() // filename -> full path
+                
+                extractedFiles.forEach { sourceFile ->
+                    val targetFile = File(targetDir, sourceFile.name)
+                    sourceFile.copyTo(targetFile, overwrite = true)
+                    restoredFiles[sourceFile.name] = targetFile.absolutePath
+                }
                 
                 // Parse lists
                 val listsArray = jsonObject.getJSONArray("lists")
@@ -4535,11 +4666,21 @@ fun RestoreScreen(
                     val isCompleted = if (taskObj.has("completed")) 
                         taskObj.getBoolean("completed") else false
                     
-                    val imagePaths = if (taskObj.has("imagePaths") && !taskObj.isNull("imagePaths"))
+                    // Get filename lists
+                    val imageFileNames = if (taskObj.has("imagePaths"))
                         taskObj.getJSONArray("imagePaths").toList().map { it.toString() } else emptyList()
-                        
-                    val filePaths = if (taskObj.has("filePaths") && !taskObj.isNull("filePaths"))
+                    
+                    val fileFileNames = if (taskObj.has("filePaths"))
                         taskObj.getJSONArray("filePaths").toList().map { it.toString() } else emptyList()
+                    
+                    // Convert filenames to full paths
+                    val imagePaths = imageFileNames.mapNotNull { filename -> 
+                        restoredFiles[filename]
+                    }
+                    
+                    val filePaths = fileFileNames.mapNotNull { filename -> 
+                        restoredFiles[filename]
+                    }
                     
                     if (isCompleted) completedTaskCount++
                     
@@ -4561,8 +4702,16 @@ fun RestoreScreen(
                     )
                 }
                 
+                // Clean up temp directory
+                tempDir.deleteRecursively()
+                
                 // Store import stats before database operations
-                importStats = Triple(listEntities.size, taskEntities.size, completedTaskCount)
+                importStats = Tuple4(
+                    listEntities.size, 
+                    taskEntities.size, 
+                    completedTaskCount,
+                    restoredFiles.size
+                )
                 
                 // Insert into database
                 scope.launch(Dispatchers.IO) {
@@ -4575,7 +4724,7 @@ fun RestoreScreen(
                         listEntities.forEach { listNameDao.insertListName(it) }
                         taskEntities.forEach { taskDao.insertTask(it) }
                         
-                        importMessage = "Data restored successfully!"
+                        importMessage = "Data restored successfully with ${restoredFiles.size} attachments!"
                     } catch (e: Exception) {
                         Log.e("RestoreScreen", "Database error", e)
                         importMessage = "Database error: ${e.localizedMessage}"
@@ -4633,7 +4782,7 @@ fun RestoreScreen(
             
             // Description
             Text(
-                text = "Restore your lists and tasks from a previously created backup file. This will replace all current data with the data from the backup file.",
+                text = "Restore your lists, tasks, and attachments from a previously created backup file. This will replace all current data with the data from the backup file.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
@@ -4676,7 +4825,7 @@ fun RestoreScreen(
             // Import button
             Button(
                 onClick = {
-                    openDocumentLauncher.launch(arrayOf("application/json"))
+                    openDocumentLauncher.launch(arrayOf("application/zip"))
                 },
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
@@ -4725,6 +4874,11 @@ fun RestoreScreen(
                         Text("Lists: ${importStats.first}")
                         Text("Tasks: ${importStats.second}")
                         Text("Completed tasks: ${importStats.third}")
+                        
+                        // Show attachments count from importStats
+                        if (importStats.fourth > 0) {
+                            Text("Attachments: ${importStats.fourth}")
+                        }
                     }
                 }
             },
@@ -4748,6 +4902,32 @@ fun RestoreScreen(
                 }
             }
         )
+    }
+}
+
+// Helper function to extract ZIP file
+private fun extractZipFile(zipFile: File, destDirectory: File) {
+    java.util.zip.ZipFile(zipFile).use { zip ->
+        val entries = zip.entries()
+        while (entries.hasMoreElements()) {
+            val entry = entries.nextElement()
+            val entryDestination = File(destDirectory, entry.name)
+            
+            // Create parent directories if they don't exist
+            if (entry.isDirectory) {
+                entryDestination.mkdirs()
+                continue
+            }
+            
+            entryDestination.parentFile?.mkdirs()
+            
+            // Extract the file
+            zip.getInputStream(entry).use { input ->
+                FileOutputStream(entryDestination).use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
     }
 }
 
@@ -4984,3 +5164,11 @@ private fun getMimeType(fileName: String): String {
         else -> "*/*"
     }
 }
+
+// Helper data class for stats with 4 values
+data class Tuple4<A, B, C, D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)
