@@ -190,25 +190,27 @@ fun NotesScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { 
-                    // Navigate to note editor screen with default values
-                    val folderId = currentFolderId
-                    if (folderId != null) {
-                        // Set the current folder ID in the savedStateHandle
-                        navController.currentBackStackEntry?.savedStateHandle?.set("currentFolderId", folderId)
-                        navController.navigate(AppDestinations.createNoteEditorRoute(-1))
-                    } else {
-                        // Show dialog to select folder first
-                        showAddNoteDialog = true
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add Note"
-                )
+            if (currentFolderId != null) {
+                FloatingActionButton(
+                    onClick = { 
+                        // Navigate to note editor screen with default values
+                        val folderId = currentFolderId
+                        if (folderId != null) {
+                            // Set the current folder ID in the savedStateHandle
+                            navController.currentBackStackEntry?.savedStateHandle?.set("currentFolderId", folderId)
+                            navController.navigate(AppDestinations.createNoteEditorRoute(-1))
+                        } else {
+                            // Show dialog to select folder first
+                            showAddNoteDialog = true
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Note"
+                    )
+                }
             }
         }
     ) { paddingValues ->
