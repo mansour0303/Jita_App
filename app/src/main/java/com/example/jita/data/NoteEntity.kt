@@ -22,5 +22,6 @@ data class NoteEntity(
     val content: String,
     val folderId: Int,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val styles: String? = null
 ) 

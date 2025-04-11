@@ -191,9 +191,29 @@ fun NoteEditorScreen(
             noteDao.getNoteById(noteId).collect { noteEntity ->
                 noteEntity?.let {
                     title = it.title
-                    textFieldValue = TextFieldValue(it.content)
-                    // Use the note's timestamp if available
                     noteTimestamp = it.updatedAt
+                    appliedStyles = it.styles?.let { jsonString ->
+                        JSONArray(jsonString).toList().map { item ->
+                            val json = item as JSONObject
+                            TextStyleInfo(
+                                start = json.getInt("start"),
+                                end = json.getInt("end"),
+                                isBold = json.optBoolean("isBold"),
+                                isUnderlined = json.optBoolean("isUnderlined"),
+                                isStrikethrough = json.optBoolean("isStrikethrough"),
+                                fontSize = json.optInt("fontSize").takeIf { it != 0 },
+                                textColor = json.optString("textColor").takeIf { it.isNotEmpty() },
+                                backgroundColor = json.optString("backgroundColor").takeIf { it.isNotEmpty() }
+                            )
+                        }
+                    } ?: emptyList()
+
+                    // Create annotated text with styles
+                    val annotatedContent = regenerateStyledText(it.content)
+                    textFieldValue = TextFieldValue(
+                        annotatedContent,
+                        selection = TextRange(0) // Reset selection to start
+                    )
                 }
             }
         }
@@ -223,26 +243,45 @@ fun NoteEditorScreen(
                     }
                 }
 
+                // Create a copy of styles to ensure we capture current state
+                val stylesToSave = JSONArray(appliedStyles.map { style ->
+                    JSONObject().apply {
+                        put("start", style.start)
+                        put("end", style.end)
+                        put("isBold", style.isBold)
+                        put("isUnderlined", style.isUnderlined)
+                        put("isStrikethrough", style.isStrikethrough)
+                        put("fontSize", style.fontSize)
+                        put("textColor", style.textColor)
+                        put("backgroundColor", style.backgroundColor)
+                    }
+                }).toString()
+
                 val note = if (noteId > 0) {
                     NoteEntity(
                         id = noteId,
                         title = title.ifBlank { "Untitled" },
                         content = textFieldValue.text,
                         folderId = finalFolderId,
-                        updatedAt = noteTimestamp // Use custom timestamp
+                        updatedAt = noteTimestamp,
+                        styles = stylesToSave
                     )
                 } else {
                     NoteEntity(
                         title = title.ifBlank { "Untitled" },
                         content = textFieldValue.text,
                         folderId = finalFolderId,
-                        createdAt = noteTimestamp, // Use custom timestamp for creation
-                        updatedAt = noteTimestamp  // Use custom timestamp for update
+                        createdAt = noteTimestamp,
+                        updatedAt = noteTimestamp,
+                        styles = stylesToSave
                     )
                 }
+                
+                // Ensure the insert completes before navigation
                 noteDao.insertNote(note)
             }
 
+            // Move navigation inside the coroutine after save completes
             if (navigateUp) {
                 navController.navigateUp()
             }
