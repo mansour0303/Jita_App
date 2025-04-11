@@ -131,6 +131,10 @@ fun NotesScreen(
     // Add state for delete confirmation
     var showDeleteFolderDialog by remember { mutableStateOf(false) }
     var folderToDelete by remember { mutableStateOf<FolderEntity?>(null) }
+    
+    // Add state for note deletion confirmation
+    var showDeleteNoteDialog by remember { mutableStateOf(false) }
+    var noteToDelete by remember { mutableStateOf<NoteEntity?>(null) }
 
     // Function to navigate back to parent folder
     fun navigateUp() {
@@ -259,9 +263,9 @@ fun NotesScreen(
                                 showViewNoteDialog = true
                             },
                             onDelete = {
-                                scope.launch {
-                                    noteDao.deleteNote(note)
-                                }
+                                // Instead of deleting immediately, show confirmation dialog
+                                noteToDelete = note
+                                showDeleteNoteDialog = true
                             }
                         )
                     }
@@ -415,6 +419,43 @@ fun NotesScreen(
                         onClick = {
                             showDeleteFolderDialog = false
                             folderToDelete = null
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        // Delete Note Confirmation Dialog
+        if (showDeleteNoteDialog && noteToDelete != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDeleteNoteDialog = false
+                    noteToDelete = null
+                },
+                title = { Text("Delete Note") },
+                text = { 
+                    Text("Are you sure you want to delete the note '${noteToDelete!!.title}'? This action cannot be undone.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                noteDao.deleteNote(noteToDelete!!)
+                                showDeleteNoteDialog = false
+                                noteToDelete = null
+                            }
+                        }
+                    ) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteNoteDialog = false
+                            noteToDelete = null
                         }
                     ) {
                         Text("Cancel")
