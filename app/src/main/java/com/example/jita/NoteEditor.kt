@@ -125,48 +125,61 @@ fun NoteEditorScreen(
             // Apply all stored styles
             for (style in appliedStyles) {
                 if (style.start < text.length && style.end <= text.length) {
-                    // Create SpanStyle with only the needed properties
-                    val spanStyle = SpanStyle()
-                    
-                    // Apply individual properties as needed
-                    val finalSpanStyle = spanStyle.copy(
-                        fontWeight = if (style.isBold) FontWeight.Bold else null,
-                        textDecoration = when {
-                            style.isUnderlined && style.isStrikethrough -> 
-                                TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
-                            style.isUnderlined -> TextDecoration.Underline
-                            style.isStrikethrough -> TextDecoration.LineThrough
-                            else -> null
+                    try {
+                        // Create SpanStyle with only the needed properties
+                        val spanStyle = SpanStyle()
+                        
+                        // Apply individual properties as needed
+                        val finalSpanStyle = spanStyle.copy(
+                            fontWeight = if (style.isBold) FontWeight.Bold else null,
+                            textDecoration = when {
+                                style.isUnderlined && style.isStrikethrough -> 
+                                    TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
+                                style.isUnderlined -> TextDecoration.Underline
+                                style.isStrikethrough -> TextDecoration.LineThrough
+                                else -> null
+                            }
+                        )
+                        
+                        // Apply fontSize separately if it exists
+                        val withFontSize = if (style.fontSize != null) {
+                            finalSpanStyle.copy(fontSize = style.fontSize.sp)
+                        } else {
+                            finalSpanStyle
                         }
-                    )
-                    
-                    // Apply fontSize separately if it exists
-                    val withFontSize = if (style.fontSize != null) {
-                        finalSpanStyle.copy(fontSize = style.fontSize.sp)
-                    } else {
-                        finalSpanStyle
+                        
+                        // Apply text color separately if it exists
+                        val withTextColor = if (style.textColor != null) {
+                            try {
+                                withFontSize.copy(color = Color(android.graphics.Color.parseColor(style.textColor)))
+                            } catch (e: Exception) {
+                                withFontSize
+                            }
+                        } else {
+                            withFontSize
+                        }
+                        
+                        // Apply background separately if it exists
+                        val withBackground = if (style.backgroundColor != null) {
+                            try {
+                                withTextColor.copy(background = Color(android.graphics.Color.parseColor(style.backgroundColor)))
+                            } catch (e: Exception) {
+                                withTextColor
+                            }
+                        } else {
+                            withTextColor
+                        }
+                        
+                        // Add the final style
+                        addStyle(
+                            withBackground,
+                            start = style.start,
+                            end = style.end
+                        )
+                    } catch (e: Exception) {
+                        // If there's any error applying a style, skip it
+                        continue
                     }
-                    
-                    // Apply text color separately if it exists
-                    val withTextColor = if (style.textColor != null) {
-                        withFontSize.copy(color = Color(android.graphics.Color.parseColor(style.textColor)))
-                    } else {
-                        withFontSize
-                    }
-                    
-                    // Apply background separately if it exists
-                    val withBackground = if (style.backgroundColor != null) {
-                        withTextColor.copy(background = Color(android.graphics.Color.parseColor(style.backgroundColor)))
-                    } else {
-                        withTextColor
-                    }
-                    
-                    // Add the final style
-                    addStyle(
-                        withBackground,
-                        start = style.start,
-                        end = style.end
-                    )
                 }
             }
         }
@@ -246,7 +259,19 @@ fun NoteEditorScreen(
         if (existingStyleIndex >= 0) {
             // Update existing style
             val updatedStyles = appliedStyles.toMutableList()
-            updatedStyles[existingStyleIndex] = styleUpdate(updatedStyles[existingStyleIndex])
+            val updatedStyle = styleUpdate(updatedStyles[existingStyleIndex])
+            
+            // If all style attributes are false/null/default, remove the style completely
+            if (!updatedStyle.isBold && 
+                !updatedStyle.isUnderlined && 
+                !updatedStyle.isStrikethrough && 
+                updatedStyle.fontSize == null && 
+                updatedStyle.textColor == null && 
+                updatedStyle.backgroundColor == null) {
+                updatedStyles.removeAt(existingStyleIndex)
+            } else {
+                updatedStyles[existingStyleIndex] = updatedStyle
+            }
             appliedStyles = updatedStyles
         } else {
             // Create new style
@@ -271,9 +296,13 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
-        // Record the applied style
+        // Check if we need to toggle on or off
+        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val shouldToggleOff = existingStyle?.isBold == true
+
+        // Record the applied style with toggle behavior
         recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(isBold = true)
+            styleInfo.copy(isBold = !shouldToggleOff)
         }
     }
     
@@ -284,9 +313,13 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
-        // Record the applied style
+        // Check if we need to toggle on or off
+        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val shouldToggleOff = existingStyle?.isUnderlined == true
+
+        // Record the applied style with toggle behavior
         recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(isUnderlined = true)
+            styleInfo.copy(isUnderlined = !shouldToggleOff)
         }
     }
 
@@ -296,9 +329,13 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
-        // Record the applied style
+        // Check if we need to toggle on or off
+        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val shouldToggleOff = existingStyle?.isStrikethrough == true
+
+        // Record the applied style with toggle behavior
         recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(isStrikethrough = true)
+            styleInfo.copy(isStrikethrough = !shouldToggleOff)
         }
     }
 
@@ -308,9 +345,13 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
-        // Record the applied style
+        // Check if we need to toggle on or off
+        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val shouldToggleOff = existingStyle?.fontSize == fontSize
+
+        // Record the applied style with toggle behavior
         recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(fontSize = fontSize)
+            styleInfo.copy(fontSize = if (shouldToggleOff) null else fontSize)
         }
 
         currentFontSize = fontSize
@@ -323,11 +364,15 @@ fun NoteEditorScreen(
         val selectionEnd = textFieldValue.selection.end
         
         // Convert color to hex format
-        val colorHex = String.format("#%06X", 0xFFFFFF and color.toArgb())
+        val colorHex = String.format("#%08X", color.toArgb())
 
-        // Record the applied style
+        // Check if we need to toggle on or off
+        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val shouldToggleOff = existingStyle?.textColor == colorHex
+
+        // Record the applied style with toggle behavior
         recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(textColor = colorHex)
+            styleInfo.copy(textColor = if (shouldToggleOff) null else colorHex)
         }
 
         textColor = color
@@ -339,12 +384,16 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
         
-        // Convert color to hex format
-        val colorHex = String.format("#%06X", 0xFFFFFF and color.toArgb())
+        // Convert color to hex format (with alpha)
+        val colorHex = String.format("#%08X", color.toArgb())
 
-        // Record the applied style
+        // Check if we need to toggle on or off
+        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val shouldToggleOff = existingStyle?.backgroundColor == colorHex
+
+        // Record the applied style with toggle behavior
         recordStyle(selectionStart, selectionEnd) { styleInfo ->
-            styleInfo.copy(backgroundColor = colorHex)
+            styleInfo.copy(backgroundColor = if (shouldToggleOff) null else colorHex)
         }
 
         highlightColor = color
