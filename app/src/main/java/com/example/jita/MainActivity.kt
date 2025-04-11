@@ -1650,35 +1650,59 @@ fun MainScreen(
                             
                             // List all images with individual delete buttons
                             currentImagePaths.forEachIndexed { index, path ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = path.substringAfterLast('/'),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
+                                        .padding(vertical = 2.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     )
-                                    IconButton(
-                                        onClick = { 
-                                            // Remove only this specific image
-                                            newTaskImagePaths = newTaskImagePaths.filterIndexed { i, _ -> i != index }
-                                            Log.d("AddTask", "Removed image at index $index, remaining: ${newTaskImagePaths.size}")
-                                        },
-                                        modifier = Modifier.size(32.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
-                                        Icon(
-                                            Icons.Filled.Delete,
-                                            contentDescription = "Remove Image",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(16.dp)
+                                        // Image thumbnail if possible
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context)
+                                                .data(path)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "Image Thumbnail",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(4.dp))
                                         )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = path.substringAfterLast('/'),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                // Simplified approach: just remove the item at this index
+                                                val updatedPaths = currentImagePaths.toMutableList()
+                                                updatedPaths.removeAt(index)
+                                                newTaskImagePaths = updatedPaths
+                                                Log.d("EditTask", "Removed image at index $index, remaining: ${updatedPaths.size}")
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "Remove Image",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1694,9 +1718,8 @@ fun MainScreen(
                                 ) {
                                     TextButton(
                                         onClick = { 
-                                            Log.d("AddTask", "Clearing all images, before: $newTaskImagePaths")
-                                            newTaskImagePaths = emptyList() 
-                                            Log.d("AddTask", "After clearing: $newTaskImagePaths")
+                                            Log.d("EditTask", "Clearing all images")
+                                            newTaskImagePaths = emptyList()
                                         },
                                         colors = ButtonDefaults.textButtonColors(
                                             contentColor = MaterialTheme.colorScheme.error
@@ -1729,35 +1752,53 @@ fun MainScreen(
                             
                             // List all files with individual delete buttons
                             currentFilePaths.forEachIndexed { index, path ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = path.substringAfterLast('/'),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
+                                        .padding(vertical = 2.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     )
-                                    IconButton(
-                                        onClick = { 
-                                            // Remove only this specific file
-                                            newTaskFilePaths = newTaskFilePaths.filterIndexed { i, _ -> i != index }
-                                            Log.d("AddTask", "Removed file at index $index, remaining: ${newTaskFilePaths.size}")
-                                        },
-                                        modifier = Modifier.size(32.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Icon(
-                                            Icons.Filled.Delete,
-                                            contentDescription = "Remove File",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(16.dp)
+                                            imageVector = Icons.Filled.Description,
+                                            contentDescription = "File Attachment",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = path.substringAfterLast('/'),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                // Simplified approach: just remove the item at this index
+                                                val updatedPaths = currentFilePaths.toMutableList()
+                                                updatedPaths.removeAt(index)
+                                                newTaskFilePaths = updatedPaths
+                                                Log.d("EditTask", "Removed file at index $index, remaining: ${updatedPaths.size}")
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "Remove File",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1773,9 +1814,8 @@ fun MainScreen(
                                 ) {
                                     TextButton(
                                         onClick = { 
-                                            Log.d("AddTask", "Clearing all files, before: $newTaskFilePaths")
-                                            newTaskFilePaths = emptyList() 
-                                            Log.d("AddTask", "After clearing: $newTaskFilePaths")
+                                            Log.d("EditTask", "Clearing all files")
+                                            newTaskFilePaths = emptyList()
                                         },
                                         colors = ButtonDefaults.textButtonColors(
                                             contentColor = MaterialTheme.colorScheme.error
@@ -1840,10 +1880,15 @@ fun MainScreen(
         }
         var timeError by remember { mutableStateOf<String?>(null) }
         
-        // Add state for attachment paths - Initialized from the task being edited
-        var editedImagePaths by remember(taskToEdit) { mutableStateOf(taskToEdit!!.imagePaths) }
-        var editedFilePaths by remember(taskToEdit) { mutableStateOf(taskToEdit!!.filePaths) }
-        // newTaskImagePaths and newTaskFilePaths are still used for *newly selected* files via the pickers
+        // Instead of separate states, initialize newTaskImagePaths and newTaskFilePaths directly
+        // This ensures we're working with the same variables in both Add and Edit dialogs
+        LaunchedEffect(taskToEdit) {
+            // Initialize attachment paths with the task's current paths when dialog opens
+            newTaskImagePaths = taskToEdit!!.imagePaths
+            newTaskFilePaths = taskToEdit!!.filePaths
+            
+            Log.d("EditTask", "Initializing with images: ${newTaskImagePaths.size}, files: ${newTaskFilePaths.size}")
+        }
 
         AlertDialog(
             onDismissRequest = {
@@ -2088,63 +2133,201 @@ fun MainScreen(
                     // Show attachment status and remove buttons
                     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) { // Align Start
                         // Image attachment status and remove button
-                        val currentImagePaths = newTaskImagePaths ?: editedImagePaths // Determine currently active paths
+                        val currentImagePaths = newTaskImagePaths ?: taskToEdit!!.imagePaths // Determine currently active paths
                         if (currentImagePaths.isNotEmpty()) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    "Attached Images:", // Show filenames
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f).padding(end = 8.dp) // Allow text to take space
-                                )
-                                IconButton(
-                                    onClick = {
-                                        Log.d("EditTask", "Clearing images, before new: $newTaskImagePaths, before edited: $editedImagePaths")
-                                        newTaskImagePaths = emptyList() // Clear newly selected images if any
-                                        editedImagePaths = emptyList()  // Clear existing/edited image paths
-                                        Log.d("EditTask", "After clearing, new: $newTaskImagePaths, edited: $editedImagePaths")
-                                    },
-                                    modifier = Modifier.size(32.dp) // Touch target size
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = "Remove Images",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp) // Icon size
+                            Text(
+                                "Attached Images:", 
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                            )
+                            
+                            // List each image with its own delete button
+                            currentImagePaths.forEachIndexed { index, path ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     )
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        // Image thumbnail if possible
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context)
+                                                .data(path)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "Image Thumbnail",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = path.substringAfterLast('/'),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                // Simplified approach: just remove the item at this index
+                                                val updatedPaths = currentImagePaths.toMutableList()
+                                                updatedPaths.removeAt(index)
+                                                newTaskImagePaths = updatedPaths
+                                                Log.d("EditTask", "Removed image at index $index, remaining: ${updatedPaths.size}")
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "Remove Image",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Add "Remove All" button if there are multiple images
+                            if (currentImagePaths.size > 1) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp)
+                                ) {
+                                    TextButton(
+                                        onClick = { 
+                                            Log.d("EditTask", "Clearing all images")
+                                            newTaskImagePaths = emptyList()
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Remove All Images",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Remove All",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                         }
 
                         // File attachment status and remove button
-                        val currentFilePaths = newTaskFilePaths ?: editedFilePaths // Determine currently active paths
+                        val currentFilePaths = newTaskFilePaths ?: taskToEdit!!.filePaths // Determine currently active paths
                         if (currentFilePaths.isNotEmpty()) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    "Attached Files:", // Show filenames
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f).padding(end = 8.dp) // Allow text to take space
-                                )
-                                IconButton(
-                                    onClick = {
-                                        Log.d("EditTask", "Clearing files, before new: $newTaskFilePaths, before edited: $editedFilePaths")
-                                        newTaskFilePaths = emptyList() // Clear newly selected files if any
-                                        editedFilePaths = emptyList()  // Clear existing/edited file paths
-                                        Log.d("EditTask", "After clearing, new: $newTaskFilePaths, edited: $editedFilePaths")
-                                    },
-                                    modifier = Modifier.size(32.dp) // Touch target size
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = "Remove Files",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp) // Icon size
+                            Text(
+                                "Attached Files:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                            )
+                            
+                            // List each file with its own delete button
+                            currentFilePaths.forEachIndexed { index, path ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     )
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Description,
+                                            contentDescription = "File Attachment",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = path.substringAfterLast('/'),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                // Simplified approach: just remove the item at this index
+                                                val updatedPaths = currentFilePaths.toMutableList()
+                                                updatedPaths.removeAt(index)
+                                                newTaskFilePaths = updatedPaths
+                                                Log.d("EditTask", "Removed file at index $index, remaining: ${updatedPaths.size}")
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "Remove File",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Add "Remove All" button if there are multiple files
+                            if (currentFilePaths.size > 1) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp)
+                                ) {
+                                    TextButton(
+                                        onClick = { 
+                                            Log.d("EditTask", "Clearing all files")
+                                            newTaskFilePaths = emptyList()
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Remove All Files",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Remove All",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2187,7 +2370,7 @@ fun MainScreen(
                             // Parse the edited time string to milliseconds
                             val timeMillis = parseTimeToMillis(editedTimeString)
 
-                            Log.d("EditTask", "Saving task with imagePaths: $newTaskImagePaths, filePaths: $newTaskFilePaths")
+                            Log.d("EditTask", "Saving task with imagePaths: ${newTaskImagePaths.size}, filePaths: ${newTaskFilePaths.size}")
                             
                             // Create updated Task object with the same ID
                             val updatedTask = Task(
