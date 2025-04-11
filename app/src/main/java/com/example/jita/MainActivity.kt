@@ -168,14 +168,14 @@ import java.util.zip.ZipOutputStream
 import java.util.zip.ZipFile
 
 
-// Define navigation routes
 object AppDestinations {
     const val MAIN_SCREEN = "main"
     const val LISTS_SCREEN = "lists"
     const val POMODORO_SCREEN = "pomodoro"
-    const val STATISTICS_SCREEN = "statistics" // Add statistics route
-    const val BACKUP_SCREEN = "backup" // Add backup route
-    const val RESTORE_SCREEN = "restore" // Add restore route
+    const val STATISTICS_SCREEN = "statistics"
+    const val BACKUP_SCREEN = "backup"
+    const val RESTORE_SCREEN = "restore"
+    const val NOTES_SCREEN = "notes"
 }
 
 // Extension function to move items within a SnapshotStateList
@@ -430,6 +430,11 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             listNameDao = listNameDao,
                             taskDao = taskDao
+                        )
+                    }
+                    composable(AppDestinations.NOTES_SCREEN) {
+                        NotesScreen(
+                            navController = navController
                         )
                     }
                 }
@@ -894,14 +899,14 @@ fun MainScreen(
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<Task>>(emptyList()) }
 
-    // Update drawer items to include Pomodoro, Statistics, Backup, and Restore
     val drawerItems = listOf(
         AppDestinations.MAIN_SCREEN to "Calendar",
         AppDestinations.LISTS_SCREEN to "Lists",
         AppDestinations.POMODORO_SCREEN to "Pomodoro",
         AppDestinations.STATISTICS_SCREEN to "Statistics",
         AppDestinations.BACKUP_SCREEN to "Backup",
-        AppDestinations.RESTORE_SCREEN to "Restore" // Add Restore item
+        AppDestinations.RESTORE_SCREEN to "Restore",
+        AppDestinations.NOTES_SCREEN to "Notes" // Add new drawer item
     )
 
     // Local state for the Add Task Dialog form
