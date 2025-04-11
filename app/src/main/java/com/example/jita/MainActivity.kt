@@ -160,6 +160,7 @@ import androidx.core.content.FileProvider
 import java.io.IOException
 import java.io.InputStream
 import androidx.compose.material.icons.filled.Description
+import java.io.FileInputStream
 
 
 // Define navigation routes
@@ -3299,12 +3300,17 @@ fun TaskCard(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { destinationUri ->
-                // Decide which file to download based on which path is available
-                val sourcePath = task.filePaths.firstOrNull() ?: task.imagePaths.firstOrNull()
-                if (sourcePath != null) {
-                    handleDownload(context, sourcePath, destinationUri)
+                // Fix: Use currentDownloadSource which contains the selected file path
+                if (currentDownloadSource != null) {
+                    handleDownload(context, currentDownloadSource!!, destinationUri)
                 } else {
-                    Toast.makeText(context, "No attachment source found", Toast.LENGTH_SHORT).show()
+                    // Fallback to the first attachment if no specific file was selected
+                    val sourcePath = task.imagePaths.firstOrNull() ?: task.filePaths.firstOrNull()
+                    if (sourcePath != null) {
+                        handleDownload(context, sourcePath, destinationUri)
+                    } else {
+                        Toast.makeText(context, "No attachment source found", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -3543,13 +3549,15 @@ fun TaskCard(
                                                     val fileName = path.substringAfterLast('/')
                                                     val mimeType = getMimeType(fileName)
 
+                                                    // Fix: Ensure we pass the correct file path to the download handler
+                                                    currentDownloadSource = path
+                                                    
                                                     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                                         addCategory(Intent.CATEGORY_OPENABLE)
                                                         type = mimeType
                                                         putExtra(Intent.EXTRA_TITLE, fileName)
                                                     }
                                                     downloadLauncher.launch(intent)
-                                                    currentDownloadSource = path
                                                 },
                                                 modifier = Modifier.size(32.dp)
                                             ) {
@@ -3645,67 +3653,41 @@ fun TaskCard(
 // Add this helper function
 private fun handleDownload(context: Context, sourcePath: String, destinationUri: Uri) {
     Log.d("Download", "Starting download. Source: $sourcePath, Destination: $destinationUri")
-    var inputStream: InputStream? = null
+    
     try {
-        // Try opening input stream via ContentResolver first (for content:// URIs)
-        try {
-            inputStream = context.contentResolver.openInputStream(Uri.parse(sourcePath))
-            if (inputStream != null) {
-                Log.d("Download", "Opened source InputStream via ContentResolver for: $sourcePath")
-            } else {
-                Log.w("Download", "ContentResolver returned null InputStream for URI: $sourcePath")
-                // Fallback to File approach if URI parsing worked but stream is null
-                val sourceFile = File(sourcePath)
-                if (sourceFile.exists()) {
-                    inputStream = sourceFile.inputStream()
-                    Log.d("Download", "Opened source InputStream via File fallback for: $sourcePath")
-                } else {
-                    throw IOException("Source file not found at path: $sourcePath")
-                }
-            }
-        } catch (e: Exception) {
-            // If Uri.parse fails or ContentResolver throws, assume it's a direct path
-            Log.w("Download", "Failed to open source via ContentResolver, trying as File: ${e.message}")
-            val sourceFile = File(sourcePath)
-            if (sourceFile.exists()) {
-                inputStream = sourceFile.inputStream()
-                Log.d("Download", "Opened source InputStream via File for: $sourcePath")
-            } else {
-                throw IOException("Source file not found at path: $sourcePath")
-            }
+        val sourceFile = File(sourcePath)
+        if (!sourceFile.exists()) {
+            Toast.makeText(context, "Source file not found: $sourcePath", Toast.LENGTH_SHORT).show()
+            return
         }
-
-        // Ensure inputStream is not null before proceeding
-        if (inputStream == null) {
-            throw IOException("Failed to obtain input stream for source: $sourcePath")
-        }
-
-        // Use the obtained input stream
-        inputStream.use { input ->
-            context.contentResolver.openOutputStream(destinationUri)?.use { output ->
-                // Manual byte copy loop instead of input.copyTo(output)
-                val buffer = ByteArray(8192) // Use a reasonably sized buffer (e.g., 8KB)
+        
+        Log.d("Download", "Source file exists: ${sourceFile.exists()}, size: ${sourceFile.length()}")
+        
+        // Determine the MIME type
+        val mimeType = getMimeType(sourceFile.name)
+        Log.d("Download", "File MIME type: $mimeType")
+        
+        // Open streams with correct mode
+        context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+            FileInputStream(sourceFile).use { inputStream ->
+                // Use a buffer for efficient copying
+                val buffer = ByteArray(8192)
                 var bytesRead: Int
                 var totalBytesCopied: Long = 0
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    output.write(buffer, 0, bytesRead)
+                
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
                     totalBytesCopied += bytesRead
                 }
-                output.flush() // Ensure all buffered data is written
-                Log.d("Download", "Successfully copied $totalBytesCopied bytes manually.")
+                
+                outputStream.flush()
+                Log.d("Download", "Successfully copied $totalBytesCopied bytes")
                 Toast.makeText(context, "File downloaded successfully", Toast.LENGTH_SHORT).show()
-            } ?: throw IOException("Could not open output stream for destination URI") // Add error handling if output stream is null
-        }
+            }
+        } ?: throw IOException("Could not open output stream for destination URI")
     } catch (e: Exception) {
-        Log.e("Download", "Error downloading file from $sourcePath to $destinationUri", e)
+        Log.e("Download", "Error downloading file: ${e.message}", e)
         Toast.makeText(context, "Download failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-    } finally {
-        // Ensure input stream is closed if opened outside the 'use' block (though 'use' should handle it)
-        try {
-            inputStream?.close()
-        } catch (closeException: IOException) {
-            Log.e("Download", "Error closing input stream", closeException)
-        }
     }
 }
 
