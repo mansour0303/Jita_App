@@ -54,6 +54,7 @@ import com.example.jita.data.FolderDao
 import com.example.jita.data.FolderEntity
 import com.example.jita.data.NoteDao
 import com.example.jita.data.NoteEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -105,8 +106,11 @@ fun NotesScreen(
     }
     
     val notes = if (currentFolderId == null) {
-        noteDao.getAllNotes().collectAsState(initial = emptyList<NoteEntity>()).value
+        // For the main notes page, we don't show any notes
+        // Notes should only be visible when inside a specific folder
+        emptyList<NoteEntity>()
     } else {
+        // Show notes specific to the current folder
         noteDao.getNotesByFolder(currentFolderId!!).collectAsState(initial = emptyList<NoteEntity>()).value
     }
 
@@ -287,6 +291,19 @@ fun NotesScreen(
                         onClick = {
                             if (newFolderName.isNotBlank()) {
                                 scope.launch {
+                                    val folderId = currentFolderId ?: run {
+                                        // If we're at the root level, we need to create a root folder
+                                        // or get one if it exists already
+                                        val rootFolders = folderDao.getRootFolders().first() // Use first() to get the first emission
+                                        if (rootFolders.isNotEmpty()) {
+                                            rootFolders.first().id
+                                        } else {
+                                            // Create a root folder if none exists
+                                            val rootFolder = FolderEntity(name = "Main")
+                                            folderDao.insertFolder(rootFolder).toInt()
+                                        }
+                                    }
+                                    
                                     val folder = FolderEntity(
                                         name = newFolderName,
                                         parentId = currentFolderId
@@ -441,9 +458,16 @@ fun NotesScreen(
                             if (newNoteTitle.isNotBlank()) {
                                 scope.launch {
                                     val folderId = currentFolderId ?: run {
-                                        // Create a root folder if none exists
-                                        val rootFolder = FolderEntity(name = "Main")
-                                        folderDao.insertFolder(rootFolder).toInt()
+                                        // If we're at the root level, we need to create a root folder
+                                        // or get one if it exists already
+                                        val rootFolders = folderDao.getRootFolders().first() // Use first() to get the first emission
+                                        if (rootFolders.isNotEmpty()) {
+                                            rootFolders.first().id
+                                        } else {
+                                            // Create a root folder if none exists
+                                            val rootFolder = FolderEntity(name = "Main")
+                                            folderDao.insertFolder(rootFolder).toInt()
+                                        }
                                     }
                                     
                                     val note = NoteEntity(

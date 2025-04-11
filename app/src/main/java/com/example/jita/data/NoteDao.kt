@@ -27,4 +27,15 @@ interface NoteDao {
 
     @Query("SELECT * FROM notes ORDER BY updatedAt DESC")
     fun getAllNotes(): Flow<List<NoteEntity>>
+    
+    @Query("""
+        SELECT n.* FROM notes n 
+        INNER JOIN folders f ON n.folderId = f.id 
+        WHERE f.parentId IS NULL 
+        ORDER BY n.updatedAt DESC
+    """)
+    fun getNotesInRootFolders(): Flow<List<NoteEntity>>
+    
+    @Query("SELECT * FROM notes WHERE folderId = :rootFolderId ORDER BY updatedAt DESC")
+    fun getNotesInRootFolder(rootFolderId: Int): Flow<List<NoteEntity>>
 } 
