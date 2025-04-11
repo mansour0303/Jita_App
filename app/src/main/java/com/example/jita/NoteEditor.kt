@@ -141,7 +141,7 @@ fun NoteEditorScreen(
             
             // Apply all stored styles
             for (style in appliedStyles) {
-                if (style.start < text.length && style.end <= text.length) {
+                if (style.start < text.length && style.end <= text.length && style.start < style.end) {
                     try {
                         // Create SpanStyle with only the needed properties
                         val spanStyle = SpanStyle()
@@ -340,6 +340,11 @@ fun NoteEditorScreen(
 
     // Function to record applied styles
     fun recordStyle(start: Int, end: Int, styleUpdate: (TextStyleInfo) -> TextStyleInfo) {
+        // Make sure selection range is valid
+        if (start >= end || start < 0 || end > textFieldValue.text.length) {
+            return
+        }
+
         // Find if there's an existing style for this range
         val existingStyleIndex = appliedStyles.indexOfFirst { style ->
             style.start == start && style.end == end
@@ -366,7 +371,18 @@ fun NoteEditorScreen(
         } else {
             // Create new style
             val newStyle = TextStyleInfo(start, end)
-            appliedStyles = appliedStyles + styleUpdate(newStyle)
+            val updatedStyle = styleUpdate(newStyle)
+            
+            // Only add if style has actual formatting
+            if (updatedStyle.isBold || 
+                updatedStyle.isUnderlined || 
+                updatedStyle.isStrikethrough || 
+                updatedStyle.fontSize != null || 
+                updatedStyle.textColor != null || 
+                updatedStyle.backgroundColor != null ||
+                updatedStyle.fontName != null) {
+                appliedStyles = appliedStyles + updatedStyle
+            }
         }
         
         // Reapply all styles to ensure they persist
@@ -773,12 +789,48 @@ fun NoteEditorScreen(
                     BasicTextField(
                         value = textFieldValue,
                         onValueChange = { newValue ->
-                            // When content or selection changes, preserve styles
-                            val newText = newValue.text
-                            val newAnnotatedString = regenerateStyledText(newText)
+                            // Store current selection
+                            val currentSelection = newValue.selection
+                            
+                            // When content changes, we need to adjust style ranges if needed
+                            if (newValue.text.length != textFieldValue.text.length) {
+                                val oldLength = textFieldValue.text.length
+                                val newLength = newValue.text.length
+                                val diff = newLength - oldLength
+                                
+                                // Only adjust styles if text length changed
+                                if (diff != 0) {
+                                    // Find position where text changed
+                                    val oldCursorPos = textFieldValue.selection.start
+                                    val newCursorPos = newValue.selection.start
+                                    val changePos = (newCursorPos - diff).coerceAtLeast(0)
+                                    
+                                    // Adjust style ranges that come after the change position
+                                    appliedStyles = appliedStyles.map { style ->
+                                        when {
+                                            // Style ends before change, keep as is
+                                            style.end <= changePos -> style
+                                            // Style starts after change, shift both start and end
+                                            style.start >= changePos -> style.copy(
+                                                start = (style.start + diff).coerceAtLeast(0),
+                                                end = (style.end + diff).coerceAtLeast(0)
+                                            )
+                                            // Style spans across change, only adjust end
+                                            else -> style.copy(
+                                                end = (style.end + diff).coerceAtLeast(style.start)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Regenerate styled text
+                            val newAnnotatedString = regenerateStyledText(newValue.text)
+                            
+                            // Update text field value with styles and preserve selection
                             textFieldValue = TextFieldValue(
                                 newAnnotatedString,
-                                selection = newValue.selection
+                                selection = currentSelection
                             )
                         },
                         textStyle = TextStyle(
