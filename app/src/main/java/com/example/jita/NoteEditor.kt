@@ -55,6 +55,23 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.graphics.toArgb
+import org.json.JSONArray
+import org.json.JSONObject
+
+// Define data classes for tracking rich text without Gson dependency
+data class TextStyleInfo(
+    val start: Int,
+    val end: Int,
+    val isBold: Boolean = false,
+    val isUnderlined: Boolean = false,
+    val isStrikethrough: Boolean = false,
+    val fontSize: Int? = null,
+    val textColor: String? = null,
+    val backgroundColor: String? = null
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,7 +87,14 @@ fun NoteEditorScreen(
 
     // State for note fields
     var title by rememberSaveable { mutableStateOf("") }
-    var content by rememberSaveable { mutableStateOf("") }
+    
+    // Use TextFieldValue to track both content and selection
+    var textFieldValue by remember { 
+        mutableStateOf(TextFieldValue(text = "")) 
+    }
+    
+    // Track if text is currently selected
+    val isTextSelected = textFieldValue.selection.start != textFieldValue.selection.end
 
     // State for formatting toolbar
     var showFormattingToolbar by remember { mutableStateOf(false) }
@@ -79,21 +103,6 @@ fun NoteEditorScreen(
     // States for text formatting
     var textColor by remember { mutableStateOf(Color.Black) }
     var highlightColor by remember { mutableStateOf(Color.Transparent) }
-
-    // Content text style - explicitly set initial FontStyle to Normal
-    var contentTextStyle by remember {
-        mutableStateOf(
-            TextStyle(
-                fontSize = 16.sp,
-                color = Color.DarkGray,
-                fontStyle = FontStyle.Normal
-            )
-        )
-    }
-
-    // Track text selection (simplified for this version)
-    var selectedText by remember { mutableStateOf("") }
-    var isTextSelected by remember { mutableStateOf(false) }
 
     // Track if we've created a default folder
     var defaultFolderId by remember { mutableStateOf<Int?>(null) }
@@ -105,13 +114,71 @@ fun NoteEditorScreen(
     val dateFormat = SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale.getDefault())
     val formattedDateTime = dateFormat.format(Date(noteTimestamp))
 
+    // Keep track of all applied styles
+    var appliedStyles by remember { mutableStateOf(listOf<TextStyleInfo>()) }
+
+    // Function to regenerate text with all applied styles
+    fun regenerateStyledText(text: String): AnnotatedString {
+        return buildAnnotatedString {
+            append(text)
+            
+            // Apply all stored styles
+            for (style in appliedStyles) {
+                if (style.start < text.length && style.end <= text.length) {
+                    // Create SpanStyle with only the needed properties
+                    val spanStyle = SpanStyle()
+                    
+                    // Apply individual properties as needed
+                    val finalSpanStyle = spanStyle.copy(
+                        fontWeight = if (style.isBold) FontWeight.Bold else null,
+                        textDecoration = when {
+                            style.isUnderlined && style.isStrikethrough -> 
+                                TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
+                            style.isUnderlined -> TextDecoration.Underline
+                            style.isStrikethrough -> TextDecoration.LineThrough
+                            else -> null
+                        }
+                    )
+                    
+                    // Apply fontSize separately if it exists
+                    val withFontSize = if (style.fontSize != null) {
+                        finalSpanStyle.copy(fontSize = style.fontSize.sp)
+                    } else {
+                        finalSpanStyle
+                    }
+                    
+                    // Apply text color separately if it exists
+                    val withTextColor = if (style.textColor != null) {
+                        withFontSize.copy(color = Color(android.graphics.Color.parseColor(style.textColor)))
+                    } else {
+                        withFontSize
+                    }
+                    
+                    // Apply background separately if it exists
+                    val withBackground = if (style.backgroundColor != null) {
+                        withTextColor.copy(background = Color(android.graphics.Color.parseColor(style.backgroundColor)))
+                    } else {
+                        withTextColor
+                    }
+                    
+                    // Add the final style
+                    addStyle(
+                        withBackground,
+                        start = style.start,
+                        end = style.end
+                    )
+                }
+            }
+        }
+    }
+
     // If noteId exists, load it from database
     LaunchedEffect(noteId) {
         if (noteId > 0) {
             noteDao.getNoteById(noteId).collect { noteEntity ->
                 noteEntity?.let {
                     title = it.title
-                    content = it.content
+                    textFieldValue = TextFieldValue(it.content)
                     // Use the note's timestamp if available
                     noteTimestamp = it.updatedAt
                 }
@@ -119,94 +186,167 @@ fun NoteEditorScreen(
         }
     }
 
-    // Simplified text formatting functions that update the TextStyle
-    fun applyBold() {
-        contentTextStyle = contentTextStyle.copy(
-            fontWeight = if (contentTextStyle.fontWeight == FontWeight.Bold)
-                FontWeight.Normal else FontWeight.Bold
-        )
+    // Update save function to save text content
+    fun saveNoteAndNavigate(navigateUp: Boolean = false) {
+        scope.launch {
+            // Only save if there's content
+            if (title.isNotBlank() || textFieldValue.text.isNotBlank()) {
+                // Make sure we have a valid folder ID
+                val finalFolderId: Int = when {
+                    folderId != null -> folderId
+                    defaultFolderId != null -> defaultFolderId as Int
+                    else -> {
+                        // Check if the default folder exists
+                        val folders = noteDao.getAllFolders()
+                        if (folders.isNotEmpty()) {
+                            folders.first().id
+                        } else {
+                            // Create a default folder if none exist
+                            val defaultFolder = FolderEntity(name = "Notes")
+                            val newFolderId = noteDao.insertFolder(defaultFolder).toInt()
+                            defaultFolderId = newFolderId
+                            newFolderId
+                        }
+                    }
+                }
+
+                val note = if (noteId > 0) {
+                    NoteEntity(
+                        id = noteId,
+                        title = title.ifBlank { "Untitled" },
+                        content = textFieldValue.text,
+                        folderId = finalFolderId,
+                        updatedAt = noteTimestamp // Use custom timestamp
+                    )
+                } else {
+                    NoteEntity(
+                        title = title.ifBlank { "Untitled" },
+                        content = textFieldValue.text,
+                        folderId = finalFolderId,
+                        createdAt = noteTimestamp, // Use custom timestamp for creation
+                        updatedAt = noteTimestamp  // Use custom timestamp for update
+                    )
+                }
+                noteDao.insertNote(note)
+            }
+
+            if (navigateUp) {
+                navController.navigateUp()
+            }
+        }
     }
 
-    fun applyItalic() {
-        // Get current font style or default to Normal if null
-        val currentFontStyle = contentTextStyle.fontStyle ?: FontStyle.Normal
-
-        // Toggle between Italic and Normal
-        val newFontStyle = if (currentFontStyle == FontStyle.Italic) {
-            FontStyle.Normal
-        } else {
-            FontStyle.Italic
+    // Function to record applied styles
+    fun recordStyle(start: Int, end: Int, styleUpdate: (TextStyleInfo) -> TextStyleInfo) {
+        // Find if there's an existing style for this range
+        val existingStyleIndex = appliedStyles.indexOfFirst { style ->
+            style.start == start && style.end == end
         }
 
-        // Apply the new style
-        contentTextStyle = contentTextStyle.copy(
-            fontStyle = newFontStyle
+        if (existingStyleIndex >= 0) {
+            // Update existing style
+            val updatedStyles = appliedStyles.toMutableList()
+            updatedStyles[existingStyleIndex] = styleUpdate(updatedStyles[existingStyleIndex])
+            appliedStyles = updatedStyles
+        } else {
+            // Create new style
+            val newStyle = TextStyleInfo(start, end)
+            appliedStyles = appliedStyles + styleUpdate(newStyle)
+        }
+        
+        // Reapply all styles to ensure they persist
+        val annotatedString = regenerateStyledText(textFieldValue.text)
+        
+        // Preserve selection
+        textFieldValue = TextFieldValue(
+            annotatedString,
+            selection = textFieldValue.selection
         )
     }
+
+    // Functions to apply formatting only to selected text
+    fun applyBold() {
+        if (!isTextSelected) return
+
+        val selectionStart = textFieldValue.selection.start
+        val selectionEnd = textFieldValue.selection.end
+
+        // Record the applied style
+        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            styleInfo.copy(isBold = true)
+        }
+    }
     
+    // Rest of the styling functions
     fun applyUnderline() {
-        val currentDecoration = contentTextStyle.textDecoration
-        contentTextStyle = contentTextStyle.copy(
-            textDecoration = if (currentDecoration != null &&
-                currentDecoration.contains(TextDecoration.Underline)) {
-                // Remove underline - create a new decoration without underline
-                when {
-                    currentDecoration.contains(TextDecoration.LineThrough) -> TextDecoration.LineThrough
-                    else -> TextDecoration.None
-                }
-            } else {
-                // Add underline, preserving other decorations if they exist
-                when {
-                    currentDecoration == null || currentDecoration == TextDecoration.None -> TextDecoration.Underline
-                    currentDecoration.contains(TextDecoration.LineThrough) -> TextDecoration.combine(
-                        listOf(TextDecoration.Underline, TextDecoration.LineThrough)
-                    )
-                    else -> TextDecoration.Underline
-                }
-            }
-        )
+        if (!isTextSelected) return
+
+        val selectionStart = textFieldValue.selection.start
+        val selectionEnd = textFieldValue.selection.end
+
+        // Record the applied style
+        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            styleInfo.copy(isUnderlined = true)
+        }
     }
 
     fun applyStrikethrough() {
-        val currentDecoration = contentTextStyle.textDecoration
-        contentTextStyle = contentTextStyle.copy(
-            textDecoration = if (currentDecoration != null &&
-                currentDecoration.contains(TextDecoration.LineThrough)) {
-                // Remove strikethrough - create a new decoration without strikethrough
-                when {
-                    currentDecoration.contains(TextDecoration.Underline) -> TextDecoration.Underline
-                    else -> TextDecoration.None
-                }
-            } else {
-                // Add strikethrough, preserving other decorations if they exist
-                when {
-                    currentDecoration == null || currentDecoration == TextDecoration.None -> TextDecoration.LineThrough
-                    currentDecoration.contains(TextDecoration.Underline) -> TextDecoration.combine(
-                        listOf(TextDecoration.Underline, TextDecoration.LineThrough)
-                    )
-                    else -> TextDecoration.LineThrough
-                }
-            }
-        )
+        if (!isTextSelected) return
+
+        val selectionStart = textFieldValue.selection.start
+        val selectionEnd = textFieldValue.selection.end
+
+        // Record the applied style
+        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            styleInfo.copy(isStrikethrough = true)
+        }
     }
 
     fun applyFontSize(fontSize: Int) {
-        contentTextStyle = contentTextStyle.copy(
-            fontSize = fontSize.sp
-        )
+        if (!isTextSelected) return
+
+        val selectionStart = textFieldValue.selection.start
+        val selectionEnd = textFieldValue.selection.end
+
+        // Record the applied style
+        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            styleInfo.copy(fontSize = fontSize)
+        }
+
+        currentFontSize = fontSize
     }
 
     fun applyTextColor(color: Color) {
-        contentTextStyle = contentTextStyle.copy(
-            color = color
-        )
+        if (!isTextSelected) return
+
+        val selectionStart = textFieldValue.selection.start
+        val selectionEnd = textFieldValue.selection.end
+        
+        // Convert color to hex format
+        val colorHex = String.format("#%06X", 0xFFFFFF and color.toArgb())
+
+        // Record the applied style
+        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            styleInfo.copy(textColor = colorHex)
+        }
+
         textColor = color
     }
 
     fun applyHighlight(color: Color) {
-        contentTextStyle = contentTextStyle.copy(
-            background = color
-        )
+        if (!isTextSelected) return
+
+        val selectionStart = textFieldValue.selection.start
+        val selectionEnd = textFieldValue.selection.end
+        
+        // Convert color to hex format
+        val colorHex = String.format("#%06X", 0xFFFFFF and color.toArgb())
+
+        // Record the applied style
+        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            styleInfo.copy(backgroundColor = colorHex)
+        }
+
         highlightColor = color
     }
 
@@ -223,49 +363,7 @@ fun NoteEditorScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         // Save note when back arrow is clicked
-                        scope.launch {
-                            // Only save if there's content
-                            if (title.isNotBlank() || content.isNotBlank()) {
-                                // Make sure we have a valid folder ID
-                                val finalFolderId: Int = when {
-                                    folderId != null -> folderId
-                                    defaultFolderId != null -> defaultFolderId as Int
-                                    else -> {
-                                        // Check if the default folder exists
-                                        val folders = noteDao.getAllFolders()
-                                        if (folders.isNotEmpty()) {
-                                            folders.first().id
-                                        } else {
-                                            // Create a default folder if none exist
-                                            val defaultFolder = FolderEntity(name = "Notes")
-                                            val newFolderId = noteDao.insertFolder(defaultFolder).toInt()
-                                            defaultFolderId = newFolderId
-                                            newFolderId
-                                        }
-                                    }
-                                }
-
-                                val note = if (noteId > 0) {
-                                    NoteEntity(
-                                        id = noteId,
-                                        title = title.ifBlank { "Untitled" },
-                                        content = content,
-                                        folderId = finalFolderId,
-                                        updatedAt = noteTimestamp // Use custom timestamp
-                                    )
-                                } else {
-                                    NoteEntity(
-                                        title = title.ifBlank { "Untitled" },
-                                        content = content,
-                                        folderId = finalFolderId,
-                                        createdAt = noteTimestamp, // Use custom timestamp for creation
-                                        updatedAt = noteTimestamp  // Use custom timestamp for update
-                                    )
-                                }
-                                noteDao.insertNote(note)
-                            }
-                            navController.navigateUp()
-                        }
+                        saveNoteAndNavigate(navigateUp = true)
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -461,21 +559,13 @@ fun NoteEditorScreen(
                     currentFontSize = currentFontSize,
                     textColor = textColor,
                     highlightColor = highlightColor,
-                    isTextSelected = true, // We'll enable all controls since we're applying to all text now
+                    isTextSelected = isTextSelected,
                     onBoldClick = { applyBold() },
-                    onItalicClick = { applyItalic() },
                     onUnderlineClick = { applyUnderline() },
                     onStrikethroughClick = { applyStrikethrough() },
-                    onFontSizeChanged = {
-                        currentFontSize = it
-                        applyFontSize(it)
-                    },
-                    onTextColorChanged = { newColor ->
-                        applyTextColor(newColor)
-                    },
-                    onHighlightColorChanged = { newColor ->
-                        applyHighlight(newColor)
-                    }
+                    onFontSizeChanged = { applyFontSize(it) },
+                    onTextColorChanged = { applyTextColor(it) },
+                    onHighlightColorChanged = { applyHighlight(it) }
                 )
             }
 
@@ -507,21 +597,27 @@ fun NoteEditorScreen(
                 singleLine = true
             )
 
-            // Content field with applied styling
+            // Content field with rich text support
             CompositionLocalProvider(LocalTextSelectionColors provides customTextSelectionColors) {
                 SelectionContainer {
                     BasicTextField(
-                        value = content,
+                        value = textFieldValue,
                         onValueChange = { newValue ->
-                            content = newValue
-
-                            // For simplicity, we're applying styles to all text
-                            // No need to track selection in this approach
+                            // When content or selection changes, preserve styles
+                            val newText = newValue.text
+                            val newAnnotatedString = regenerateStyledText(newText)
+                            textFieldValue = TextFieldValue(
+                                newAnnotatedString,
+                                selection = newValue.selection
+                            )
                         },
-                        textStyle = contentTextStyle,
+                        textStyle = TextStyle(
+                            fontSize = 16.sp,
+                            color = Color.DarkGray
+                        ),
                         decorationBox = { innerTextField ->
                             Box(modifier = Modifier.fillMaxWidth()) {
-                                if (content.isEmpty()) {
+                                if (textFieldValue.text.isEmpty()) {
                                     Text(
                                         text = "Note here",
                                         color = Color.LightGray,
@@ -540,51 +636,9 @@ fun NoteEditorScreen(
         }
     }
 
-    // Save note when back button is pressed
+    // Update BackHandler to use the saveNote function
     BackHandler {
-        scope.launch {
-            // Only save if there's content
-            if (title.isNotBlank() || content.isNotBlank()) {
-                // Make sure we have a valid folder ID
-                val finalFolderId: Int = when {
-                    folderId != null -> folderId
-                    defaultFolderId != null -> defaultFolderId as Int
-                    else -> {
-                        // Check if the default folder exists
-                        val folders = noteDao.getAllFolders()
-                        if (folders.isNotEmpty()) {
-                            folders.first().id
-                        } else {
-                            // Create a default folder if none exist
-                            val defaultFolder = FolderEntity(name = "Notes")
-                            val newFolderId = noteDao.insertFolder(defaultFolder).toInt()
-                            defaultFolderId = newFolderId
-                            newFolderId
-                        }
-                    }
-                }
-
-                val note = if (noteId > 0) {
-                    NoteEntity(
-                        id = noteId,
-                        title = title.ifBlank { "Untitled" },
-                        content = content,
-                        folderId = finalFolderId,
-                        updatedAt = noteTimestamp // Use custom timestamp
-                    )
-                } else {
-                    NoteEntity(
-                        title = title.ifBlank { "Untitled" },
-                        content = content,
-                        folderId = finalFolderId,
-                        createdAt = noteTimestamp, // Use custom timestamp for creation
-                        updatedAt = noteTimestamp  // Use custom timestamp for update
-                    )
-                }
-                noteDao.insertNote(note)
-            }
-            navController.navigateUp()
-        }
+        saveNoteAndNavigate(navigateUp = true)
     }
 
     // Set focus to title when screen is first displayed if creating a new note
@@ -602,7 +656,6 @@ private fun TextFormattingToolbar(
     highlightColor: Color,
     isTextSelected: Boolean,
     onBoldClick: () -> Unit,
-    onItalicClick: () -> Unit,
     onUnderlineClick: () -> Unit,
     onStrikethroughClick: () -> Unit,
     onFontSizeChanged: (Int) -> Unit,
