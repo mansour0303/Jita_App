@@ -240,6 +240,8 @@ class MainActivity : ComponentActivity() {
         val database = AppDatabase.getDatabase(applicationContext)
         val listNameDao = database.listNameDao()
         val taskDao = database.taskDao()
+        val noteDao = database.noteDao()  // Add this line
+        val folderDao = database.folderDao()  // Add this line
 
         setContent {
             // --- Coroutine Scope ---
@@ -434,7 +436,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable(AppDestinations.NOTES_SCREEN) {
                         NotesScreen(
-                            navController = navController
+                            navController = navController,
+                            noteDao = noteDao,  // Add this line
+                            folderDao = folderDao  // Add this line
                         )
                     }
                 }

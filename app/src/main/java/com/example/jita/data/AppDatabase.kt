@@ -9,8 +9,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [TaskEntity::class, ListNameEntity::class],
-    version = 3,
+    entities = [TaskEntity::class, ListNameEntity::class, NoteEntity::class, FolderEntity::class],
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class)
@@ -18,6 +18,8 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun listNameDao(): ListNameDao
     abstract fun taskDao(): TaskDao
+    abstract fun noteDao(): NoteDao
+    abstract fun folderDao(): FolderDao
 
     companion object {
         // Singleton prevents multiple instances of database opening at the
@@ -73,6 +75,39 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 3 to 4 (adding notes and folders tables)
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create folders table
+                database.execSQL(
+                    """
+                    CREATE TABLE folders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        parentId INTEGER,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        FOREIGN KEY (parentId) REFERENCES folders(id) ON DELETE CASCADE
+                    )
+                    """
+                )
+                
+                // Create notes table
+                database.execSQL(
+                    """
+                    CREATE TABLE notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        title TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        folderId INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0,
+                        FOREIGN KEY (folderId) REFERENCES folders(id) ON DELETE CASCADE
+                    )
+                    """
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             // if the INSTANCE is not null, then return it,
             // if it is, then create the database
@@ -82,7 +117,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .build()
                 INSTANCE = instance
                 // return instance
