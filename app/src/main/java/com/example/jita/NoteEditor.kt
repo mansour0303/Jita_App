@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.example.jita.data.NoteDao
 import com.example.jita.data.NoteEntity
+import com.example.jita.data.FolderEntity
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -42,6 +43,9 @@ fun NoteEditorScreen(
     // State for note fields
     var title by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
+    
+    // Track if we've created a default folder
+    var defaultFolderId by remember { mutableStateOf<Int?>(null) }
     
     // Format current date for display
     val dateFormat = SimpleDateFormat("dd/MM, HH:mm", Locale.getDefault())
@@ -64,7 +68,50 @@ fun NoteEditorScreen(
             TopAppBar(
                 title = { },
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
+                    IconButton(onClick = { 
+                        // Save note when back arrow is clicked
+                        scope.launch {
+                            // Only save if there's content
+                            if (title.isNotBlank() || content.isNotBlank()) {
+                                // Make sure we have a valid folder ID
+                                val finalFolderId: Int = when {
+                                    folderId != null -> folderId
+                                    defaultFolderId != null -> defaultFolderId as Int
+                                    else -> {
+                                        // Check if the default folder exists
+                                        val folders = noteDao.getAllFolders()
+                                        if (folders.isNotEmpty()) {
+                                            folders.first().id
+                                        } else {
+                                            // Create a default folder if none exist
+                                            val defaultFolder = FolderEntity(name = "Notes")
+                                            val newFolderId = noteDao.insertFolder(defaultFolder).toInt()
+                                            defaultFolderId = newFolderId
+                                            newFolderId
+                                        }
+                                    }
+                                }
+                                
+                                val note = if (noteId > 0) {
+                                    NoteEntity(
+                                        id = noteId,
+                                        title = title.ifBlank { "Untitled" },
+                                        content = content,
+                                        folderId = finalFolderId,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                } else {
+                                    NoteEntity(
+                                        title = title.ifBlank { "Untitled" },
+                                        content = content,
+                                        folderId = finalFolderId
+                                    )
+                                }
+                                noteDao.insertNote(note)
+                            }
+                            navController.navigateUp()
+                        }
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -265,37 +312,55 @@ fun NoteEditorScreen(
         }
     }
     
+    // Set focus to title when screen is first displayed if creating a new note
+    LaunchedEffect(Unit) {
+        if (noteId <= 0) {
+            titleFocusRequester.requestFocus()
+        }
+    }
+    
     // Save note when back button is pressed
     BackHandler {
         scope.launch {
             // Only save if there's content
             if (title.isNotBlank() || content.isNotBlank()) {
-                val resolvedFolderId = folderId ?: 1 // Default to first folder if null
+                // Make sure we have a valid folder ID
+                val finalFolderId: Int = when {
+                    folderId != null -> folderId
+                    defaultFolderId != null -> defaultFolderId as Int
+                    else -> {
+                        // Check if the default folder exists
+                        val folders = noteDao.getAllFolders()
+                        if (folders.isNotEmpty()) {
+                            folders.first().id
+                        } else {
+                            // Create a default folder if none exist
+                            val defaultFolder = FolderEntity(name = "Notes")
+                            val newFolderId = noteDao.insertFolder(defaultFolder).toInt()
+                            defaultFolderId = newFolderId
+                            newFolderId
+                        }
+                    }
+                }
+                
                 val note = if (noteId > 0) {
                     NoteEntity(
                         id = noteId,
                         title = title.ifBlank { "Untitled" },
                         content = content,
-                        folderId = resolvedFolderId,
+                        folderId = finalFolderId,
                         updatedAt = System.currentTimeMillis()
                     )
                 } else {
                     NoteEntity(
                         title = title.ifBlank { "Untitled" },
                         content = content,
-                        folderId = resolvedFolderId
+                        folderId = finalFolderId
                     )
                 }
                 noteDao.insertNote(note)
             }
             navController.navigateUp()
-        }
-    }
-    
-    // Set focus to title when screen is first displayed if creating a new note
-    LaunchedEffect(Unit) {
-        if (noteId <= 0) {
-            titleFocusRequester.requestFocus()
         }
     }
 } 

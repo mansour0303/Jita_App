@@ -38,4 +38,10 @@ interface NoteDao {
     
     @Query("SELECT * FROM notes WHERE folderId = :rootFolderId ORDER BY updatedAt DESC")
     fun getNotesInRootFolder(rootFolderId: Int): Flow<List<NoteEntity>>
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFolder(folder: FolderEntity): Long
+    
+    @Query("SELECT * FROM folders ORDER BY id ASC")
+    suspend fun getAllFolders(): List<FolderEntity>
 } 
