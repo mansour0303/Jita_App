@@ -129,6 +129,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.GifDecoder
@@ -176,6 +178,12 @@ object AppDestinations {
     const val BACKUP_SCREEN = "backup"
     const val RESTORE_SCREEN = "restore"
     const val NOTES_SCREEN = "notes"
+    const val NOTE_EDITOR_SCREEN = "note_editor/{noteId}"
+    
+    // Helper functions for parameterized navigation
+    fun createNoteEditorRoute(noteId: Int = -1): String {
+        return "note_editor/$noteId"
+    }
 }
 
 // Extension function to move items within a SnapshotStateList
@@ -439,6 +447,28 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             noteDao = noteDao,  // Add this line
                             folderDao = folderDao  // Add this line
+                        )
+                    }
+                    composable(
+                        route = AppDestinations.NOTE_EDITOR_SCREEN,
+                        arguments = listOf(
+                            navArgument("noteId") { type = NavType.IntType }
+                        )
+                    ) { backStackEntry ->
+                        val noteId = backStackEntry.arguments?.getInt("noteId") ?: -1
+                        val currentFolderId = if (noteId == -1) {
+                            // If creating a new note, use the current folder ID from the notes screen
+                            (navController.previousBackStackEntry?.savedStateHandle?.get<Int?>("currentFolderId")) ?: -1
+                        } else {
+                            // If editing, we'll get the folder ID from the note itself
+                            -1
+                        }
+                        
+                        NoteEditorScreen(
+                            navController = navController,
+                            noteDao = noteDao,
+                            noteId = noteId,
+                            folderId = if (currentFolderId > 0) currentFolderId else null
                         )
                     }
                 }

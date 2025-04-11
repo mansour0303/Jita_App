@@ -191,7 +191,18 @@ fun NotesScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddNoteDialog = true },
+                onClick = { 
+                    // Navigate to note editor screen with default values
+                    val folderId = currentFolderId
+                    if (folderId != null) {
+                        // Set the current folder ID in the savedStateHandle
+                        navController.currentBackStackEntry?.savedStateHandle?.set("currentFolderId", folderId)
+                        navController.navigate(AppDestinations.createNoteEditorRoute(-1))
+                    } else {
+                        // Show dialog to select folder first
+                        showAddNoteDialog = true
+                    }
+                },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
@@ -255,16 +266,16 @@ fun NotesScreen(
                 }
 
                 if (notes.isNotEmpty()) {
-                    items(notes) { note ->
+                    items(notes.map { it.toNote() }) { note ->
+                        Spacer(modifier = Modifier.height(8.dp))
                         NoteItem(
-                            note = note.toNote(),
+                            note = note,
                             onClick = {
-                                selectedNote = note.toNote()
-                                showViewNoteDialog = true
+                                // Navigate directly to editor screen instead of showing dialog
+                                navController.navigate(AppDestinations.createNoteEditorRoute(note.id))
                             },
                             onDelete = {
-                                // Instead of deleting immediately, show confirmation dialog
-                                noteToDelete = note
+                                noteToDelete = notes.find { it.id == note.id }
                                 showDeleteNoteDialog = true
                             }
                         )
@@ -573,8 +584,11 @@ fun NotesScreen(
                 dismissButton = {
                     TextButton(
                         onClick = {
-                            // Open edit dialog (not implemented yet)
+                            // Navigate to edit screen
                             showViewNoteDialog = false
+                            selectedNote?.let {
+                                navController.navigate(AppDestinations.createNoteEditorRoute(it.id))
+                            }
                         }
                     ) {
                         Text("Edit")
