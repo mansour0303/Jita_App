@@ -18,7 +18,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
@@ -28,6 +27,9 @@ import com.example.jita.data.FolderEntity
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +41,7 @@ fun NoteEditorScreen(
 ) {
     val scope = rememberCoroutineScope()
     val titleFocusRequester = remember { FocusRequester() }
+    val context = LocalContext.current
     
     // State for note fields
     var title by rememberSaveable { mutableStateOf("") }
@@ -47,9 +50,12 @@ fun NoteEditorScreen(
     // Track if we've created a default folder
     var defaultFolderId by remember { mutableStateOf<Int?>(null) }
     
+    // State for custom date/time
+    var noteTimestamp by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
+    
     // Format current date for display
-    val dateFormat = SimpleDateFormat("dd/MM, HH:mm", Locale.getDefault())
-    val currentDateTime = dateFormat.format(Date())
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale.getDefault())
+    val formattedDateTime = dateFormat.format(Date(noteTimestamp))
     
     // If noteId exists, load it from database
     LaunchedEffect(noteId) {
@@ -58,6 +64,8 @@ fun NoteEditorScreen(
                 noteEntity?.let {
                     title = it.title
                     content = it.content
+                    // Use the note's timestamp if available
+                    noteTimestamp = it.updatedAt
                 }
             }
         }
@@ -98,13 +106,15 @@ fun NoteEditorScreen(
                                         title = title.ifBlank { "Untitled" },
                                         content = content,
                                         folderId = finalFolderId,
-                                        updatedAt = System.currentTimeMillis()
+                                        updatedAt = noteTimestamp // Use custom timestamp
                                     )
                                 } else {
                                     NoteEntity(
                                         title = title.ifBlank { "Untitled" },
                                         content = content,
-                                        folderId = finalFolderId
+                                        folderId = finalFolderId,
+                                        createdAt = noteTimestamp, // Use custom timestamp for creation
+                                        updatedAt = noteTimestamp  // Use custom timestamp for update
                                     )
                                 }
                                 noteDao.insertNote(note)
@@ -240,12 +250,48 @@ fun NoteEditorScreen(
                 modifier = Modifier.padding(vertical = 8.dp)
             ) {
                 Text(
-                    text = currentDateTime,
+                    text = formattedDateTime,
                     color = Color.Gray,
                     fontSize = 16.sp
                 )
                 IconButton(
-                    onClick = { /* Edit date */ },
+                    onClick = { 
+                        // Get current date from timestamp
+                        val calendar = Calendar.getInstance().apply {
+                            timeInMillis = noteTimestamp
+                        }
+                        
+                        // Show date picker
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, dayOfMonth ->
+                                // Update calendar with selected date
+                                calendar.set(Calendar.YEAR, year)
+                                calendar.set(Calendar.MONTH, month)
+                                calendar.set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                                
+                                // Show time picker after date is selected
+                                TimePickerDialog(
+                                    context,
+                                    { _, hourOfDay, minute ->
+                                        // Update calendar with selected time
+                                        calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                                        calendar.set(Calendar.MINUTE, minute)
+                                        calendar.set(Calendar.SECOND, 0)
+                                        
+                                        // Update timestamp state
+                                        noteTimestamp = calendar.timeInMillis
+                                    },
+                                    calendar.get(Calendar.HOUR_OF_DAY),
+                                    calendar.get(Calendar.MINUTE),
+                                    true // 24-hour format
+                                ).show()
+                            },
+                            calendar.get(Calendar.YEAR),
+                            calendar.get(Calendar.MONTH),
+                            calendar.get(Calendar.DAY_OF_MONTH)
+                        ).show()
+                    },
                     modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
@@ -312,13 +358,6 @@ fun NoteEditorScreen(
         }
     }
     
-    // Set focus to title when screen is first displayed if creating a new note
-    LaunchedEffect(Unit) {
-        if (noteId <= 0) {
-            titleFocusRequester.requestFocus()
-        }
-    }
-    
     // Save note when back button is pressed
     BackHandler {
         scope.launch {
@@ -349,18 +388,27 @@ fun NoteEditorScreen(
                         title = title.ifBlank { "Untitled" },
                         content = content,
                         folderId = finalFolderId,
-                        updatedAt = System.currentTimeMillis()
+                        updatedAt = noteTimestamp // Use custom timestamp
                     )
                 } else {
                     NoteEntity(
                         title = title.ifBlank { "Untitled" },
                         content = content,
-                        folderId = finalFolderId
+                        folderId = finalFolderId,
+                        createdAt = noteTimestamp, // Use custom timestamp for creation
+                        updatedAt = noteTimestamp  // Use custom timestamp for update
                     )
                 }
                 noteDao.insertNote(note)
             }
             navController.navigateUp()
+        }
+    }
+    
+    // Set focus to title when screen is first displayed if creating a new note
+    LaunchedEffect(Unit) {
+        if (noteId <= 0) {
+            titleFocusRequester.requestFocus()
         }
     }
 } 
