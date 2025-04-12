@@ -30,5 +30,6 @@ data class NoteEntity(
     val styles: String? = null,
     val checkboxItems: String? = null,
     val voiceRecordings: String? = null,
-    val fileAttachments: String? = null  // Added new field for file attachments
+    val fileAttachments: String? = null,  // Added new field for file attachments
+    val imageAttachments: String? = null  // Added new field for image attachments
 ) 

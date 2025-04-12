@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TaskEntity::class, ListNameEntity::class, NoteEntity::class, FolderEntity::class],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class)
@@ -218,6 +218,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 9 to 10 (adding imageAttachments column to notes table)
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add imageAttachments column if it doesn't exist
+                val tableInfo = database.query("PRAGMA table_info(notes)")
+                val columnNames = mutableSetOf<String>()
+                
+                // Collect existing column names
+                tableInfo.use {
+                    while (it.moveToNext()) {
+                        val columnName = it.getString(it.getColumnIndex("name"))
+                        columnNames.add(columnName)
+                    }
+                }
+                
+                // Add imageAttachments column if it doesn't exist
+                if (!columnNames.contains("imageAttachments")) {
+                    database.execSQL("ALTER TABLE notes ADD COLUMN imageAttachments TEXT")
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             // if the INSTANCE is not null, then return it,
             // if it is, then create the database
@@ -227,7 +249,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .fallbackToDestructiveMigration() // Add this to handle severe migration issues
                 .build()
                 INSTANCE = instance

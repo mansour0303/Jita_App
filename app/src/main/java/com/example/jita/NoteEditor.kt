@@ -88,6 +88,18 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.core.content.FileProvider
 import android.content.Intent
+import android.net.Uri
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+
+// Add this sealed class for handling image URIs safely
+sealed class ImageUriState {
+    data class Success(val uri: android.net.Uri) : ImageUriState()
+    object Error : ImageUriState()
+    object NotFound : ImageUriState()
+}
 
 // Define data class for checkbox items
 data class CheckboxItem(
@@ -125,6 +137,15 @@ data class FileAttachment(
     val filePath: String,
     val fileSizeBytes: Long,
     val mimeType: String,
+    val attachedAt: Long = System.currentTimeMillis()
+)
+
+// Define data class for image attachments
+data class ImageAttachment(
+    val id: String = UUID.randomUUID().toString(),
+    val fileName: String,
+    val filePath: String,
+    val fileSizeBytes: Long,
     val attachedAt: Long = System.currentTimeMillis()
 )
 
@@ -237,6 +258,10 @@ fun NoteEditorScreen(
     // Add state for file attachments
     var fileAttachments by remember { mutableStateOf(listOf<FileAttachment>()) }
     var showAttachmentSection by remember { mutableStateOf(true) }
+
+    // Add state for image attachments
+    var imageAttachments by remember { mutableStateOf(listOf<ImageAttachment>()) }
+    var showImageSection by remember { mutableStateOf(true) }
 
     // Update selection tracking based on current text field selection
     LaunchedEffect(textFieldValue.selection) {
@@ -419,6 +444,16 @@ fun NoteEditorScreen(
                         android.util.Log.e("NoteEditor", "Error loading file attachments: ${e.message}")
                     }
                     
+                    // Load image attachments if they exist
+                    try {
+                        it.imageAttachments?.let { imagesJson ->
+                            val imagesArray = JSONArray(imagesJson)
+                            imageAttachments = imagesArray.toImageAttachmentsList()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteEditor", "Error loading image attachments: ${e.message}")
+                    }
+                    
                     appliedStyles = it.styles?.let { jsonString ->
                         try {
                             JSONArray(jsonString).toList().map { item ->
@@ -456,7 +491,7 @@ fun NoteEditorScreen(
     fun saveNoteAndNavigate(navigateUp: Boolean = false) {
         scope.launch {
             // Only save if there's content
-            if (title.isNotBlank() || textFieldValue.text.isNotBlank() || checkboxItems.isNotEmpty() || fileAttachments.isNotEmpty()) {
+            if (title.isNotBlank() || textFieldValue.text.isNotBlank() || checkboxItems.isNotEmpty() || fileAttachments.isNotEmpty() || imageAttachments.isNotEmpty()) {
                 try {
                     // Create a copy of styles to ensure we capture current state
                     val stylesToSave = JSONArray(appliedStyles.map { style ->
@@ -517,6 +552,21 @@ fun NoteEditorScreen(
                         null
                     }
 
+                    // Save image attachments as JSON
+                    val imageAttachmentsJson = if (imageAttachments.isNotEmpty()) {
+                        JSONArray(imageAttachments.map { image ->
+                            JSONObject().apply {
+                                put("id", image.id)
+                                put("fileName", image.fileName)
+                                put("filePath", image.filePath)
+                                put("fileSizeBytes", image.fileSizeBytes)
+                                put("attachedAt", image.attachedAt)
+                            }
+                        }).toString()
+                    } else {
+                        null
+                    }
+
                     val note = if (noteId > 0) {
                         NoteEntity(
                             id = noteId,
@@ -527,7 +577,8 @@ fun NoteEditorScreen(
                             styles = stylesToSave,
                             checkboxItems = checkboxItemsJson,
                             voiceRecordings = voiceRecordingsJson,
-                            fileAttachments = fileAttachmentsJson
+                            fileAttachments = fileAttachmentsJson,
+                            imageAttachments = imageAttachmentsJson
                         )
                     } else {
                         NoteEntity(
@@ -539,7 +590,8 @@ fun NoteEditorScreen(
                             styles = stylesToSave,
                             checkboxItems = checkboxItemsJson,
                             voiceRecordings = voiceRecordingsJson,
-                            fileAttachments = fileAttachmentsJson
+                            fileAttachments = fileAttachmentsJson,
+                            imageAttachments = imageAttachmentsJson
                         )
                     }
                     
@@ -855,6 +907,63 @@ fun NoteEditorScreen(
         }
     }
 
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                val newImages = uris.mapNotNull { uri ->
+                    try {
+                        // Create directory for images
+                        val imageDir = createImageDirectory(context)
+                        
+                        // Get file details
+                        val fileName = getFileName(context, uri) ?: "unknown_image"
+                        val mimeType = context.contentResolver.getType(uri) ?: "image/*"
+                        
+                        // Check if it's an image
+                        if (!mimeType.startsWith("image/")) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Only image files are supported",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@mapNotNull null
+                        }
+                        
+                        // Create a unique file name to avoid collisions
+                        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                        val uniqueFileName = "${timestamp}_${fileName}"
+                        val targetFile = File(imageDir, uniqueFileName)
+                        
+                        // Copy the file to our directory
+                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                            targetFile.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+                        
+                        // Create image attachment object
+                        ImageAttachment(
+                            fileName = fileName,
+                            filePath = targetFile.absolutePath,
+                            fileSizeBytes = targetFile.length()
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteEditor", "Error adding image: ${e.message}")
+                        null
+                    }
+                }
+                
+                // Add new images to the list
+                if (newImages.isNotEmpty()) {
+                    imageAttachments = imageAttachments + newImages
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -949,8 +1058,10 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // Image button
-                    IconButton(onClick = { /* Insert image */ }) {
+                    // Image button - update to use image picker
+                    IconButton(onClick = { 
+                        imagePickerLauncher.launch("image/*") 
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Image,
                             contentDescription = "Insert Image",
@@ -1332,6 +1443,77 @@ fun NoteEditorScreen(
                                     },
                                     onDownload = { downloadLocation ->
                                         downloadAttachmentToCustomLocation(context, attachment, downloadLocation)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Image Attachments section - display if there are any images
+            AnimatedVisibility(
+                visible = imageAttachments.isNotEmpty(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp)
+                ) {
+                    // Add collapsible header with state - change default to false
+                    var isImageSectionExpanded by remember { mutableStateOf(false) }
+                    
+                    // Header row with toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isImageSectionExpanded = !isImageSectionExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Images",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.DarkGray
+                        )
+                        
+                        // Arrow icon that rotates based on expanded state
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = if (isImageSectionExpanded) 
+                                "Collapse" else "Expand",
+                            modifier = Modifier
+                                .rotate(if (isImageSectionExpanded) 0f else 180f)
+                                .size(20.dp),
+                            tint = Color.Gray
+                        )
+                    }
+                    
+                    // Collapsible content
+                    AnimatedVisibility(
+                        visible = isImageSectionExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                            // Replace individual image items with image slider
+                            if (imageAttachments.isNotEmpty()) {
+                                ImageSlider(
+                                    images = imageAttachments,
+                                    onDeleteImage = { image ->
+                                        imageAttachments = imageAttachments.filter { it.id != image.id }
+                                        // Also delete the physical file
+                                        try {
+                                            File(image.filePath).delete()
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("NoteEditor", "Error deleting image: ${e.message}")
+                                        }
+                                    },
+                                    onDownloadImage = { image, uri ->
+                                        downloadImageToCustomLocation(context, image, uri)
                                     }
                                 )
                             }
@@ -2785,6 +2967,626 @@ fun FileAttachmentItem(
                     contentDescription = "Delete Attachment",
                     tint = Color.Gray
                 )
+            }
+        }
+    }
+}
+
+// Helper functions for image attachments
+private fun createImageDirectory(context: android.content.Context): File {
+    val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_notes/images")
+    if (!directory.exists()) {
+        directory.mkdirs()
+    }
+    return directory
+}
+
+// Convert JSON array to image attachments list
+private fun JSONArray?.toImageAttachmentsList(): List<ImageAttachment> {
+    if (this == null) return emptyList()
+    
+    return try {
+        val images = mutableListOf<ImageAttachment>()
+        for (i in 0 until this.length()) {
+            val item = this.getJSONObject(i)
+            images.add(
+                ImageAttachment(
+                    id = item.optString("id", UUID.randomUUID().toString()),
+                    fileName = item.optString("fileName", "Unnamed image"),
+                    filePath = item.optString("filePath", ""),
+                    fileSizeBytes = item.optLong("fileSizeBytes", 0),
+                    attachedAt = item.optLong("attachedAt", System.currentTimeMillis())
+                )
+            )
+        }
+        images
+    } catch (e: Exception) {
+        android.util.Log.e("NoteEditor", "Error parsing image attachments: ${e.message}")
+        emptyList()
+    }
+}
+
+private fun downloadImageToCustomLocation(context: android.content.Context, image: ImageAttachment, downloadLocation: android.net.Uri?) {
+    if (downloadLocation == null) return
+    
+    try {
+        context.contentResolver.openOutputStream(downloadLocation)?.use { outputStream ->
+            File(image.filePath).inputStream().use { inputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NoteEditor", "Error downloading image: ${e.message}")
+    }
+}
+
+// Image attachment item UI component
+@Composable
+fun ImageAttachmentItem(
+    image: ImageAttachment,
+    onDelete: () -> Unit,
+    onDownload: (android.net.Uri?) -> Unit
+) {
+    val context = LocalContext.current
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    
+    // Format file size
+    val formattedSize = remember(image.fileSizeBytes) {
+        when {
+            image.fileSizeBytes < 1024 -> "${image.fileSizeBytes} B"
+            image.fileSizeBytes < 1024 * 1024 -> "${image.fileSizeBytes / 1024} KB"
+            else -> String.format("%.1f MB", image.fileSizeBytes / (1024.0 * 1024.0))
+        }
+    }
+    
+    // Format date
+    val formattedDate = remember(image.attachedAt) {
+        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(image.attachedAt))
+    }
+    
+    // File download launcher
+    val downloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("image/*")
+    ) { uri -> 
+        onDownload(uri)
+    }
+    
+    // Function to open the image
+    fun openImage() {
+        try {
+            val file = File(image.filePath)
+            if (file.exists()) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "image/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                context.startActivity(intent)
+            } else {
+                // Show toast if file doesn't exist
+                android.widget.Toast.makeText(
+                    context,
+                    "Image not found",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ImageAttachmentItem", "Error opening image: ${e.message}")
+            // Show error toast
+            android.widget.Toast.makeText(
+                context,
+                "Error opening image: ${e.message}",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Image") },
+            text = { Text("Are you sure you want to delete this image?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { openImage() },
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF5F5F5)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Image thumbnail
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(Color.LightGray, RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+            ) {
+                // Load image thumbnail if file exists
+                val imageFile = File(image.filePath)
+                if (imageFile.exists()) {
+                    val imageUri = androidx.core.content.FileProvider.getUriForFile(
+                        context, 
+                        "${context.packageName}.fileprovider", 
+                        imageFile
+                    )
+                    
+                    // Use AsyncImage from Coil or other image loading library if available
+                    // For simplicity, using an Icon here
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.BrokenImage,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+            }
+            
+            // Image details
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+            ) {
+                Text(
+                    text = image.fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.DarkGray
+                )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = formattedSize,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Text(
+                        text = "•",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Text(
+                        text = formattedDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+            
+            // Download button
+            IconButton(
+                onClick = { 
+                    downloadLauncher.launch(image.fileName)
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FileDownload,
+                    contentDescription = "Download",
+                    tint = Color.Gray
+                )
+            }
+            
+            // Delete button
+            IconButton(
+                onClick = { showDeleteConfirmation = true }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Image",
+                    tint = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+// Image slider component
+@Composable
+fun ImageSlider(
+    images: List<ImageAttachment>,
+    onDeleteImage: (ImageAttachment) -> Unit,
+    onDownloadImage: (ImageAttachment, android.net.Uri?) -> Unit
+) {
+    val context = LocalContext.current
+    var currentImageIndex by remember { mutableStateOf(0) }
+    val currentImage = images[currentImageIndex]
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    
+    // File download launcher
+    val downloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("image/*")
+    ) { uri -> 
+        onDownloadImage(currentImage, uri)
+    }
+    
+    // Function to open the image
+    fun openImage(image: ImageAttachment) {
+        try {
+            val file = File(image.filePath)
+            if (file.exists()) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "image/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                context.startActivity(intent)
+            } else {
+                // Show toast if file doesn't exist
+                android.widget.Toast.makeText(
+                    context,
+                    "Image not found",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ImageSlider", "Error opening image: ${e.message}")
+            // Show error toast
+            android.widget.Toast.makeText(
+                context,
+                "Error opening image: ${e.message}",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    // Format file size
+    val formattedSize = remember(currentImage.fileSizeBytes) {
+        when {
+            currentImage.fileSizeBytes < 1024 -> "${currentImage.fileSizeBytes} B"
+            currentImage.fileSizeBytes < 1024 * 1024 -> "${currentImage.fileSizeBytes / 1024} KB"
+            else -> String.format("%.1f MB", currentImage.fileSizeBytes / (1024.0 * 1024.0))
+        }
+    }
+    
+    // Format date
+    val formattedDate = remember(currentImage.attachedAt) {
+        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(currentImage.attachedAt))
+    }
+    
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Image") },
+            text = { Text("Are you sure you want to delete this image?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteImage(currentImage)
+                        showDeleteConfirmation = false
+                        // Update current index if needed
+                        if (currentImageIndex >= images.size - 1 && currentImageIndex > 0) {
+                            currentImageIndex--
+                        }
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF5F5F5)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // Image preview
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                    .clickable { openImage(currentImage) },
+                contentAlignment = Alignment.Center
+            ) {
+                // Load image if file exists
+                val imageFile = File(currentImage.filePath)
+                
+                // Use remember to handle the potentially throwing code outside the Composable execution
+                val imageUriState = remember(imageFile.absolutePath) {
+                    if (imageFile.exists()) {
+                        try {
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                imageFile
+                            )
+                            ImageUriState.Success(uri)
+                        } catch (e: Exception) {
+                            android.util.Log.e("ImageSlider", "Error creating URI: ${e.message}")
+                            ImageUriState.Error
+                        }
+                    } else {
+                        ImageUriState.NotFound
+                    }
+                }
+                
+                // Load and display the actual image bitmap if available
+                val bitmap = remember(imageFile.absolutePath) {
+                    if (imageFile.exists()) {
+                        try {
+                            val options = BitmapFactory.Options().apply {
+                                inJustDecodeBounds = false
+                                // Scale down large images to avoid OutOfMemoryError
+                                if (outHeight > 1024 || outWidth > 1024) {
+                                    val scale = maxOf(
+                                        outHeight / 1024f,
+                                        outWidth / 1024f
+                                    ).toInt()
+                                    inSampleSize = if (scale > 0) scale else 1
+                                }
+                            }
+                            BitmapFactory.decodeFile(imageFile.absolutePath, options)?.asImageBitmap()
+                        } catch (e: Exception) {
+                            android.util.Log.e("ImageSlider", "Error loading image: ${e.message}")
+                            null
+                        }
+                    } else null
+                }
+                
+                when {
+                    bitmap != null -> {
+                        // Display the actual image
+                        Image(
+                            bitmap = bitmap,
+                            contentDescription = currentImage.fileName,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    imageUriState is ImageUriState.Success -> {
+                        // Fallback to icon if we have URI but can't load bitmap
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
+                    imageUriState is ImageUriState.Error -> {
+                        Icon(
+                            imageVector = Icons.Default.BrokenImage,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
+                    imageUriState is ImageUriState.NotFound -> {
+                        Icon(
+                            imageVector = Icons.Default.BrokenImage,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
+                }
+                
+                // Navigation buttons (left/right)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Previous button
+                    IconButton(
+                        onClick = {
+                            if (currentImageIndex > 0) {
+                                currentImageIndex--
+                            }
+                        },
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+                        enabled = currentImageIndex > 0
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowLeft,
+                            contentDescription = "Previous Image",
+                            tint = Color.White
+                        )
+                    }
+                    
+                    // Spacer
+                    Spacer(modifier = Modifier.weight(1f))
+                    
+                    // Next button
+                    IconButton(
+                        onClick = {
+                            if (currentImageIndex < images.size - 1) {
+                                currentImageIndex++
+                            }
+                        },
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+                        enabled = currentImageIndex < images.size - 1
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = "Next Image",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+            
+            // Pagination indicator
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                images.forEachIndexed { index, _ ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(8.dp)
+                            .background(
+                                if (index == currentImageIndex) MaterialTheme.colorScheme.primary
+                                else Color.Gray.copy(alpha = 0.3f),
+                                CircleShape
+                            )
+                            .clickable { currentImageIndex = index }
+                    )
+                }
+            }
+            
+            // Image details and actions
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Image details
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                ) {
+                    Text(
+                        text = currentImage.fileName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.DarkGray
+                    )
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = formattedSize,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        
+                        Text(
+                            text = formattedDate,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        
+                        Text(
+                            text = "${currentImageIndex + 1}/${images.size}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+                
+                // Actions
+                Row {
+                    // Download button
+                    IconButton(
+                        onClick = { 
+                            downloadLauncher.launch(currentImage.fileName)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = "Download",
+                            tint = Color.Gray
+                        )
+                    }
+                    
+                    // Delete button
+                    IconButton(
+                        onClick = { showDeleteConfirmation = true }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Image",
+                            tint = Color.Gray
+                        )
+                    }
+                }
             }
         }
     }
