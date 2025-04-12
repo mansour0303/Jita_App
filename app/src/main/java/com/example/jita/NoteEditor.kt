@@ -63,6 +63,13 @@ import org.json.JSONObject
 import androidx.compose.ui.res.fontResource
 import com.example.jita.R
 
+// Define data class for checkbox items
+data class CheckboxItem(
+    val id: String = UUID.randomUUID().toString(),
+    var text: String = "Checkbox item",
+    var isChecked: Boolean = false
+)
+
 // Define data classes for tracking rich text without Gson dependency
 data class TextStyleInfo(
     val start: Int,
@@ -89,6 +96,29 @@ val SegoePrintFontFamily = FontFamily(
     Font(R.font.segoeprb, FontWeight.Bold)
 )
 
+// Add a debug helper to safely handle checkbox data even if it's missing
+private fun JSONArray?.toCheckboxList(): List<CheckboxItem> {
+    if (this == null) return emptyList()
+    
+    return try {
+        val items = mutableListOf<CheckboxItem>()
+        for (i in 0 until this.length()) {
+            val item = this.getJSONObject(i)
+            items.add(
+                CheckboxItem(
+                    id = item.optString("id", UUID.randomUUID().toString()),
+                    text = item.optString("text", "Checkbox item"),
+                    isChecked = item.optBoolean("isChecked", false)
+                )
+            )
+        }
+        items
+    } catch (e: Exception) {
+        android.util.Log.e("NoteEditor", "Error parsing checkbox items: ${e.message}")
+        emptyList()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteEditorScreen(
@@ -113,6 +143,11 @@ fun NoteEditorScreen(
     var isTextSelected by remember { 
         mutableStateOf(false) 
     }
+
+    // Add state for checkbox widget
+    var showCheckboxWidget by remember { mutableStateOf(false) }
+    // Replace single checkbox with a list of checkbox items
+    var checkboxItems by remember { mutableStateOf(listOf<CheckboxItem>()) }
 
     // Update selection tracking based on current text field selection
     LaunchedEffect(textFieldValue.selection) {
@@ -227,12 +262,14 @@ fun NoteEditorScreen(
                             withTextColor
                         }
                         
-                        // Add the final style
-                        addStyle(
-                            withBackground,
-                            start = style.start,
-                            end = style.end
-                        )
+                        // Add the final style - ensure start is not greater than end
+                        if (style.start < style.end) {
+                            addStyle(
+                                withBackground,
+                                start = style.start,
+                                end = style.end
+                            )
+                        }
                     } catch (e: Exception) {
                         // If there's any error applying a style, skip it
                         android.util.Log.e("NoteEditor", "Error applying style: ${e.message}")
@@ -252,6 +289,23 @@ fun NoteEditorScreen(
                     noteTimestamp = it.updatedAt
                     // Store the note's folder ID 
                     noteFolderId = it.folderId
+                    
+                    // Load checkbox items if they exist with safer parsing
+                    try {
+                        it.checkboxItems?.let { checkboxJson ->
+                            val checkboxArray = JSONArray(checkboxJson)
+                            val loadedItems = checkboxArray.toCheckboxList()
+                            
+                            checkboxItems = loadedItems
+                            // Show checkbox widget if we have items
+                            if (loadedItems.isNotEmpty()) {
+                                showCheckboxWidget = true
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteEditor", "Error loading checkbox items: ${e.message}")
+                    }
+                    
                     appliedStyles = it.styles?.let { jsonString ->
                         try {
                             JSONArray(jsonString).toList().map { item ->
@@ -285,48 +339,68 @@ fun NoteEditorScreen(
         }
     }
 
-    // Update save function to save text content
+    // Update save function to save text content with null check for folderId
     fun saveNoteAndNavigate(navigateUp: Boolean = false) {
         scope.launch {
             // Only save if there's content
-            if (title.isNotBlank() || textFieldValue.text.isNotBlank()) {
-                // Create a copy of styles to ensure we capture current state
-                val stylesToSave = JSONArray(appliedStyles.map { style ->
-                    JSONObject().apply {
-                        put("start", style.start)
-                        put("end", style.end)
-                        put("isBold", style.isBold)
-                        put("isUnderlined", style.isUnderlined)
-                        put("isStrikethrough", style.isStrikethrough)
-                        put("fontSize", style.fontSize)
-                        put("textColor", style.textColor)
-                        put("backgroundColor", style.backgroundColor)
-                        put("fontName", style.fontName)
+            if (title.isNotBlank() || textFieldValue.text.isNotBlank() || checkboxItems.isNotEmpty()) {
+                try {
+                    // Create a copy of styles to ensure we capture current state
+                    val stylesToSave = JSONArray(appliedStyles.map { style ->
+                        JSONObject().apply {
+                            put("start", style.start)
+                            put("end", style.end)
+                            put("isBold", style.isBold)
+                            put("isUnderlined", style.isUnderlined)
+                            put("isStrikethrough", style.isStrikethrough)
+                            put("fontSize", style.fontSize)
+                            put("textColor", style.textColor)
+                            put("backgroundColor", style.backgroundColor)
+                            put("fontName", style.fontName)
+                        }
+                    }).toString()
+                    
+                    // Save checkbox items as JSON
+                    val checkboxItemsJson = if (checkboxItems.isNotEmpty()) {
+                        JSONArray(checkboxItems.map { item ->
+                            JSONObject().apply {
+                                put("id", item.id)
+                                put("text", item.text)
+                                put("isChecked", item.isChecked)
+                            }
+                        }).toString()
+                    } else {
+                        null
                     }
-                }).toString()
 
-                val note = if (noteId > 0) {
-                    NoteEntity(
-                        id = noteId,
-                        title = title.ifBlank { "Untitled" },
-                        content = textFieldValue.text,
-                        folderId = noteFolderId,
-                        updatedAt = noteTimestamp,
-                        styles = stylesToSave
-                    )
-                } else {
-                    NoteEntity(
-                        title = title.ifBlank { "Untitled" },
-                        content = textFieldValue.text,
-                        folderId = noteFolderId,
-                        createdAt = noteTimestamp,
-                        updatedAt = noteTimestamp,
-                        styles = stylesToSave
-                    )
+                    val note = if (noteId > 0) {
+                        NoteEntity(
+                            id = noteId,
+                            title = title.ifBlank { "Untitled" },
+                            content = textFieldValue.text,
+                            folderId = noteFolderId,
+                            updatedAt = noteTimestamp,
+                            styles = stylesToSave,
+                            checkboxItems = checkboxItemsJson
+                        )
+                    } else {
+                        NoteEntity(
+                            title = title.ifBlank { "Untitled" },
+                            content = textFieldValue.text,
+                            folderId = noteFolderId,
+                            createdAt = noteTimestamp,
+                            updatedAt = noteTimestamp,
+                            styles = stylesToSave,
+                            checkboxItems = checkboxItemsJson
+                        )
+                    }
+                    
+                    // Ensure the insert completes before navigation
+                    noteDao.insertNote(note)
+                } catch (e: Exception) {
+                    // Log the error but don't crash the app
+                    android.util.Log.e("NoteEditor", "Error saving note: ${e.message}")
                 }
-                
-                // Ensure the insert completes before navigation
-                noteDao.insertNote(note)
             }
 
             // Move navigation inside the coroutine after save completes
@@ -338,8 +412,9 @@ fun NoteEditorScreen(
 
     // Function to record applied styles
     fun recordStyle(start: Int, end: Int, styleUpdate: (TextStyleInfo) -> TextStyleInfo) {
-        // Make sure selection range is valid
+        // Make sure selection range is valid and not reversed
         if (start >= end || start < 0 || end > textFieldValue.text.length) {
+            // Don't attempt to apply style to invalid range
             return
         }
 
@@ -416,6 +491,11 @@ fun NoteEditorScreen(
         // Sort selection if needed (in case user selected from end to start)
         val start = minOf(selectionStart, selectionEnd)
         val end = maxOf(selectionStart, selectionEnd)
+
+        // Make sure selection is valid
+        if (start < 0 || end > textFieldValue.text.length || start >= end) {
+            return
+        }
 
         // Check if we need to toggle on or off
         val existingStyle = appliedStyles.find { it.start == start && it.end == end }
@@ -640,7 +720,10 @@ fun NoteEditorScreen(
                     }
 
                     // Checkbox button
-                    IconButton(onClick = { /* Insert checkbox */ }) {
+                    IconButton(onClick = { 
+                        // Toggle checkbox widget
+                        showCheckboxWidget = !showCheckboxWidget
+                    }) {
                         Icon(
                             imageVector = Icons.Default.CheckBox,
                             contentDescription = "Insert Checkbox",
@@ -822,6 +905,104 @@ fun NoteEditorScreen(
                 singleLine = true
             )
 
+            // Checkbox widget - displayed below title when activated
+            AnimatedVisibility(
+                visible = showCheckboxWidget,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    // Display all checkbox items
+                    checkboxItems.forEach { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = item.isChecked,
+                                onCheckedChange = { checked ->
+                                    // Update the checked state of this specific item
+                                    checkboxItems = checkboxItems.map {
+                                        if (it.id == item.id) it.copy(isChecked = checked) else it
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = MaterialTheme.colorScheme.primary,
+                                    uncheckedColor = Color.Gray
+                                )
+                            )
+                            
+                            // Editable text field for each checkbox item
+                            BasicTextField(
+                                value = item.text,
+                                onValueChange = { newText ->
+                                    // Update text for this specific checkbox item
+                                    checkboxItems = checkboxItems.map {
+                                        if (it.id == item.id) it.copy(text = newText) else it
+                                    }
+                                },
+                                textStyle = TextStyle(
+                                    fontSize = 16.sp,
+                                    color = Color.DarkGray
+                                ),
+                                decorationBox = { innerTextField ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 8.dp)
+                                    ) {
+                                        innerTextField()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            // Delete button for this checkbox item
+                            IconButton(
+                                onClick = {
+                                    checkboxItems = checkboxItems.filter { it.id != item.id }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Delete checkbox item",
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Button to add a new checkbox item
+                    TextButton(
+                        onClick = {
+                            checkboxItems = checkboxItems + CheckboxItem()
+                        },
+                        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add checkbox",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        
+                        Text(
+                            text = "Add item",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                }
+            }
+
             // Content field with rich text support
             CompositionLocalProvider(LocalTextSelectionColors provides customTextSelectionColors) {
                 SelectionContainer {
@@ -830,6 +1011,13 @@ fun NoteEditorScreen(
                         onValueChange = { newValue ->
                             // Store current selection
                             val currentSelection = newValue.selection
+                            
+                            // Validate the selection range
+                            val validSelection = if (currentSelection.start > currentSelection.end) {
+                                TextRange(currentSelection.end, currentSelection.start)
+                            } else {
+                                currentSelection
+                            }
                             
                             // When content changes, we need to adjust style ranges if needed
                             if (newValue.text.length != textFieldValue.text.length) {
@@ -841,7 +1029,7 @@ fun NoteEditorScreen(
                                 if (diff != 0) {
                                     // Find position where text changed
                                     val oldCursorPos = textFieldValue.selection.start
-                                    val newCursorPos = newValue.selection.start
+                                    val newCursorPos = validSelection.start
                                     val changePos = (newCursorPos - diff).coerceAtLeast(0)
                                     
                                     // Adjust style ranges that come after the change position
@@ -865,23 +1053,23 @@ fun NoteEditorScreen(
                             
                             // Only regenerate styled text if needed
                             val shouldRegenerate = textFieldValue.text != newValue.text || 
-                                                 (isTextSelected != (newValue.selection.start != newValue.selection.end))
+                                                 (isTextSelected != (validSelection.start != validSelection.end))
                                                  
                             if (shouldRegenerate) {
                                 // Update if text is selected
-                                isTextSelected = newValue.selection.start != newValue.selection.end
+                                isTextSelected = validSelection.start != validSelection.end
                                 
                                 // Regenerate styled text
                                 val newAnnotatedString = regenerateStyledText(newValue.text)
                                 
-                                // Update text field value with styles and preserve selection
+                                // Update text field value with styles and use valid selection
                                 textFieldValue = TextFieldValue(
                                     newAnnotatedString,
-                                    selection = currentSelection
+                                    selection = validSelection
                                 )
                             } else {
                                 // Just update the selection without regenerating styles
-                                textFieldValue = textFieldValue.copy(selection = currentSelection)
+                                textFieldValue = textFieldValue.copy(selection = validSelection)
                             }
                         },
                         textStyle = TextStyle(

@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TaskEntity::class, ListNameEntity::class, NoteEntity::class, FolderEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class)
@@ -162,6 +162,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 7 to 8 (adding checkboxItems column to notes table)
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add the new column
+                database.execSQL("ALTER TABLE notes ADD COLUMN checkboxItems TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             // if the INSTANCE is not null, then return it,
             // if it is, then create the database
@@ -171,7 +179,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .fallbackToDestructiveMigration() // Add this to handle severe migration issues
                 .build()
                 INSTANCE = instance
                 // return instance

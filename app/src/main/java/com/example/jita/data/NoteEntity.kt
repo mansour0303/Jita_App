@@ -23,5 +23,6 @@ data class NoteEntity(
     val folderId: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val styles: String? = null
+    val styles: String? = null,
+    val checkboxItems: String? = null
 ) 
