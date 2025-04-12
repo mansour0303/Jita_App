@@ -133,6 +133,9 @@ fun NoteEditorScreen(
 
     // Keep track of all applied styles
     var appliedStyles by remember { mutableStateOf(listOf<TextStyleInfo>()) }
+    
+    // Track note's folder ID
+    var noteFolderId by remember { mutableStateOf(folderId) }
 
     // Function to regenerate text with all applied styles
     fun regenerateStyledText(text: String): AnnotatedString {
@@ -240,20 +243,27 @@ fun NoteEditorScreen(
                 noteEntity?.let {
                     title = it.title
                     noteTimestamp = it.updatedAt
+                    // Store the note's folder ID 
+                    noteFolderId = it.folderId
                     appliedStyles = it.styles?.let { jsonString ->
-                        JSONArray(jsonString).toList().map { item ->
-                            val json = item as JSONObject
-                            TextStyleInfo(
-                                start = json.getInt("start"),
-                                end = json.getInt("end"),
-                                isBold = json.optBoolean("isBold"),
-                                isUnderlined = json.optBoolean("isUnderlined"),
-                                isStrikethrough = json.optBoolean("isStrikethrough"),
-                                fontSize = json.optInt("fontSize").takeIf { it != 0 },
-                                textColor = json.optString("textColor").takeIf { it.isNotEmpty() },
-                                backgroundColor = json.optString("backgroundColor").takeIf { it.isNotEmpty() },
-                                fontName = json.optString("fontName").takeIf { it.isNotEmpty() }
-                            )
+                        try {
+                            JSONArray(jsonString).toList().map { item ->
+                                val json = item as JSONObject
+                                TextStyleInfo(
+                                    start = json.getInt("start"),
+                                    end = json.getInt("end"),
+                                    isBold = json.optBoolean("isBold"),
+                                    isUnderlined = json.optBoolean("isUnderlined"),
+                                    isStrikethrough = json.optBoolean("isStrikethrough"),
+                                    fontSize = json.optInt("fontSize").takeIf { it != 0 },
+                                    textColor = json.optString("textColor").takeIf { it.isNotEmpty() },
+                                    backgroundColor = json.optString("backgroundColor").takeIf { it.isNotEmpty() },
+                                    fontName = json.optString("fontName").takeIf { it.isNotEmpty() }
+                                )
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("NoteEditor", "Error parsing styles: ${e.message}")
+                            emptyList()
                         }
                     } ?: emptyList()
 
@@ -273,9 +283,6 @@ fun NoteEditorScreen(
         scope.launch {
             // Only save if there's content
             if (title.isNotBlank() || textFieldValue.text.isNotBlank()) {
-                // Use the provided folder ID directly without creating a default one
-                val finalFolderId: Int? = folderId
-
                 // Create a copy of styles to ensure we capture current state
                 val stylesToSave = JSONArray(appliedStyles.map { style ->
                     JSONObject().apply {
@@ -296,7 +303,7 @@ fun NoteEditorScreen(
                         id = noteId,
                         title = title.ifBlank { "Untitled" },
                         content = textFieldValue.text,
-                        folderId = finalFolderId,
+                        folderId = noteFolderId,
                         updatedAt = noteTimestamp,
                         styles = stylesToSave
                     )
@@ -304,7 +311,7 @@ fun NoteEditorScreen(
                     NoteEntity(
                         title = title.ifBlank { "Untitled" },
                         content = textFieldValue.text,
-                        folderId = finalFolderId,
+                        folderId = noteFolderId,
                         createdAt = noteTimestamp,
                         updatedAt = noteTimestamp,
                         styles = stylesToSave

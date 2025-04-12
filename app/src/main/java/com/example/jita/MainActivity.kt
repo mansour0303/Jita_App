@@ -458,17 +458,17 @@ class MainActivity : ComponentActivity() {
                         val noteId = backStackEntry.arguments?.getInt("noteId") ?: -1
                         val currentFolderId = if (noteId == -1) {
                             // If creating a new note, use the current folder ID from the notes screen
-                            (navController.previousBackStackEntry?.savedStateHandle?.get<Int?>("currentFolderId")) ?: -1
+                            navController.previousBackStackEntry?.savedStateHandle?.get<Int>("currentFolderId")
                         } else {
                             // If editing, we'll get the folder ID from the note itself
-                            -1
+                            null
                         }
                         
                         NoteEditorScreen(
                             navController = navController,
                             noteDao = noteDao,
                             noteId = noteId,
-                            folderId = if (currentFolderId > 0) currentFolderId else null
+                            folderId = currentFolderId
                         )
                     }
                 }
