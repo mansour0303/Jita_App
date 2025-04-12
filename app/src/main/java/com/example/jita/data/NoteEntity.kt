@@ -20,7 +20,7 @@ data class NoteEntity(
     val id: Int = 0,
     val title: String,
     val content: String,
-    val folderId: Int,
+    val folderId: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val styles: String? = null

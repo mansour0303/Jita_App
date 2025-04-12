@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TaskEntity::class, ListNameEntity::class, NoteEntity::class, FolderEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class)
@@ -123,6 +123,45 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 6 to 7 (making folderId nullable in notes table)
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create temporary table with new schema
+                database.execSQL(
+                    """
+                    CREATE TABLE notes_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        title TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        folderId INTEGER,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0,
+                        styles TEXT,
+                        FOREIGN KEY (folderId) REFERENCES folders(id) ON DELETE CASCADE
+                    )
+                    """
+                )
+                
+                // Copy data from old table to new
+                database.execSQL(
+                    """
+                    INSERT INTO notes_new (
+                        id, title, content, folderId, createdAt, updatedAt, styles
+                    ) 
+                    SELECT 
+                        id, title, content, folderId, createdAt, updatedAt, styles
+                    FROM notes
+                    """
+                )
+                
+                // Drop old table
+                database.execSQL("DROP TABLE notes")
+                
+                // Rename new table to match original name
+                database.execSQL("ALTER TABLE notes_new RENAME TO notes")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             // if the INSTANCE is not null, then return it,
             // if it is, then create the database
@@ -132,7 +171,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
                 INSTANCE = instance
                 // return instance

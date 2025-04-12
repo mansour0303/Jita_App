@@ -273,24 +273,8 @@ fun NoteEditorScreen(
         scope.launch {
             // Only save if there's content
             if (title.isNotBlank() || textFieldValue.text.isNotBlank()) {
-                // Make sure we have a valid folder ID
-                val finalFolderId: Int = when {
-                    folderId != null -> folderId
-                    defaultFolderId != null -> defaultFolderId as Int
-                    else -> {
-                        // Check if the default folder exists
-                        val folders = noteDao.getAllFolders()
-                        if (folders.isNotEmpty()) {
-                            folders.first().id
-                        } else {
-                            // Create a default folder if none exist
-                            val defaultFolder = FolderEntity(name = "Notes")
-                            val newFolderId = noteDao.insertFolder(defaultFolder).toInt()
-                            defaultFolderId = newFolderId
-                            newFolderId
-                        }
-                    }
-                }
+                // Use the provided folder ID directly without creating a default one
+                val finalFolderId: Int? = folderId
 
                 // Create a copy of styles to ensure we capture current state
                 val stylesToSave = JSONArray(appliedStyles.map { style ->

@@ -65,7 +65,7 @@ data class Note(
     val id: Int = 0,
     val title: String,
     val content: String,
-    val folderId: Int,
+    val folderId: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -106,9 +106,8 @@ fun NotesScreen(
     }
     
     val notes = if (currentFolderId == null) {
-        // For the main notes page, we don't show any notes
-        // Notes should only be visible when inside a specific folder
-        emptyList<NoteEntity>()
+        // For the main notes page, show notes that don't have a folder
+        noteDao.getNotesWithoutFolder().collectAsState(initial = emptyList<NoteEntity>()).value
     } else {
         // Show notes specific to the current folder
         noteDao.getNotesByFolder(currentFolderId!!).collectAsState(initial = emptyList<NoteEntity>()).value
@@ -190,27 +189,22 @@ fun NotesScreen(
             )
         },
         floatingActionButton = {
-            if (currentFolderId != null) {
-                FloatingActionButton(
-                    onClick = { 
-                        // Navigate to note editor screen with default values
-                        val folderId = currentFolderId
-                        if (folderId != null) {
-                            // Set the current folder ID in the savedStateHandle
-                            navController.currentBackStackEntry?.savedStateHandle?.set("currentFolderId", folderId)
-                            navController.navigate(AppDestinations.createNoteEditorRoute(-1))
-                        } else {
-                            // Show dialog to select folder first
-                            showAddNoteDialog = true
-                        }
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add Note"
-                    )
-                }
+            FloatingActionButton(
+                onClick = { 
+                    // Navigate to note editor screen with default values
+                    // Allow creating notes without a folder as well
+                    if (currentFolderId != null) {
+                        // Set the current folder ID in the savedStateHandle
+                        navController.currentBackStackEntry?.savedStateHandle?.set("currentFolderId", currentFolderId)
+                    }
+                    navController.navigate(AppDestinations.createNoteEditorRoute(-1))
+                },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Note"
+                )
             }
         }
     ) { paddingValues ->
@@ -308,19 +302,8 @@ fun NotesScreen(
                         onClick = {
                             if (newFolderName.isNotBlank()) {
                                 scope.launch {
-                                    val folderId = currentFolderId ?: run {
-                                        // If we're at the root level, we need to create a root folder
-                                        // or get one if it exists already
-                                        val rootFolders = folderDao.getRootFolders().first() // Use first() to get the first emission
-                                        if (rootFolders.isNotEmpty()) {
-                                            rootFolders.first().id
-                                        } else {
-                                            // Create a root folder if none exists
-                                            val rootFolder = FolderEntity(name = "Main")
-                                            folderDao.insertFolder(rootFolder).toInt()
-                                        }
-                                    }
-                                    
+                                    // Create the folder directly with the correct parentId
+                                    // No need to create a "Main" folder
                                     val folder = FolderEntity(
                                         name = newFolderName,
                                         parentId = currentFolderId
@@ -511,23 +494,11 @@ fun NotesScreen(
                         onClick = {
                             if (newNoteTitle.isNotBlank()) {
                                 scope.launch {
-                                    val folderId = currentFolderId ?: run {
-                                        // If we're at the root level, we need to create a root folder
-                                        // or get one if it exists already
-                                        val rootFolders = folderDao.getRootFolders().first() // Use first() to get the first emission
-                                        if (rootFolders.isNotEmpty()) {
-                                            rootFolders.first().id
-                                        } else {
-                                            // Create a root folder if none exists
-                                            val rootFolder = FolderEntity(name = "Main")
-                                            folderDao.insertFolder(rootFolder).toInt()
-                                        }
-                                    }
-                                    
+                                    // Use the current folder ID directly without creating a default folder
                                     val note = NoteEntity(
                                         title = newNoteTitle,
                                         content = newNoteContent,
-                                        folderId = folderId
+                                        folderId = currentFolderId
                                     )
                                     noteDao.insertNote(note)
                                     showAddNoteDialog = false
