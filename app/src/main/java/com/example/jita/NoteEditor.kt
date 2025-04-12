@@ -81,6 +81,11 @@ import java.io.File
 import java.io.IOException
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 
 // Define data class for checkbox items
 data class CheckboxItem(
@@ -1156,6 +1161,10 @@ fun NoteEditorScreen(
                             voiceRecordings.forEach { recording ->
                                 VoiceRecordingItem(
                                     recording = recording,
+                                    voiceRecordings = voiceRecordings,
+                                    onVoiceRecordingsChange = { newRecordings ->
+                                        voiceRecordings = newRecordings
+                                    },
                                     onDelete = {
                                         voiceRecordings = voiceRecordings.filter { it.id != recording.id }
                                     }
@@ -2005,6 +2014,8 @@ fun VoiceRecordingDialog(
 @Composable
 fun VoiceRecordingItem(
     recording: VoiceRecording,
+    voiceRecordings: List<VoiceRecording>,
+    onVoiceRecordingsChange: (List<VoiceRecording>) -> Unit,
     onDelete: () -> Unit
 ) {
     var isPlaying by remember { mutableStateOf(false) }
@@ -2014,6 +2025,12 @@ fun VoiceRecordingItem(
     
     // Add state for delete confirmation dialog
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    
+    // Add states for renaming
+    var isRenaming by remember { mutableStateOf(false) }
+    var newFileName by remember { mutableStateOf(recording.fileName) }
+    
+    val context = LocalContext.current
     
     // Timer to update current position during playback
     val handler = remember { Handler(Looper.getMainLooper()) }
@@ -2028,6 +2045,41 @@ fun VoiceRecordingItem(
     // Format date
     val formattedDate = remember(recording.recordedAt) {
         SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(recording.recordedAt))
+    }
+    
+    // Function to rename the physical file
+    fun renameFile(newName: String): VoiceRecording {
+        try {
+            // Get old file
+            val oldFile = File(recording.filePath)
+            if (!oldFile.exists()) {
+                return recording
+            }
+            
+            // Ensure we keep the extension
+            val extension = recording.fileName.substring(recording.fileName.lastIndexOf("."))
+            val nameWithExtension = if (newName.endsWith(extension)) newName else "$newName$extension"
+            
+            // Create new file path
+            val parentDir = oldFile.parentFile
+            val newFile = File(parentDir, nameWithExtension)
+            
+            // Rename the file
+            val success = oldFile.renameTo(newFile)
+            
+            // Return updated recording if successful
+            return if (success) {
+                recording.copy(
+                    fileName = nameWithExtension,
+                    filePath = newFile.absolutePath
+                )
+            } else {
+                recording
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("VoiceRecordingItem", "Error renaming file: ${e.message}")
+            return recording
+        }
     }
     
     // Update position when playing
@@ -2166,11 +2218,44 @@ fun VoiceRecordingItem(
                         .weight(1f)
                         .padding(horizontal = 8.dp)
                 ) {
-                    Text(
-                        text = recording.fileName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.DarkGray
-                    )
+                    if (isRenaming) {
+                        // Editable text field for renaming
+                        OutlinedTextField(
+                            value = newFileName,
+                            onValueChange = { newFileName = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = Color.LightGray
+                            ),
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    if (newFileName.isNotBlank()) {
+                                        // Update the file name in the file system
+                                        val updatedRecording = renameFile(newFileName)
+                                        
+                                        // Update the recording in the voiceRecordings list
+                                        onVoiceRecordingsChange(voiceRecordings.map { 
+                                            if (it.id == recording.id) updatedRecording else it 
+                                        })
+                                    }
+                                    isRenaming = false
+                                }
+                            )
+                        )
+                    } else {
+                        // Clickable text to initiate rename
+                        Text(
+                            text = recording.fileName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.DarkGray,
+                            modifier = Modifier.clickable { isRenaming = true }
+                        )
+                    }
                     
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
