@@ -846,11 +846,11 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // Drawing/pen button
-                    IconButton(onClick = { /* Drawing */ }) {
+                    // Link button for attaching files
+                    IconButton(onClick = { /* Attach files */ }) {
                         Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Drawing",
+                            imageVector = Icons.Default.Link,
+                            contentDescription = "Attach Files",
                             tint = Color.DarkGray
                         )
                     }
