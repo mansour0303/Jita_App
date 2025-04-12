@@ -1210,7 +1210,7 @@ fun NoteEditorScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 2.dp)
                 ) {
                     // Add collapsible header with state
                     var isVoiceRecordingsSectionExpanded by remember { mutableStateOf(false) }
@@ -1220,13 +1220,13 @@ fun NoteEditorScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { isVoiceRecordingsSectionExpanded = !isVoiceRecordingsSectionExpanded }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
                             text = "Voice Recordings",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = Color.DarkGray
                         )
                         
@@ -1235,9 +1235,9 @@ fun NoteEditorScreen(
                             imageVector = Icons.Default.KeyboardArrowUp,
                             contentDescription = if (isVoiceRecordingsSectionExpanded) 
                                 "Collapse" else "Expand",
-                            modifier = Modifier.rotate(
-                                if (isVoiceRecordingsSectionExpanded) 0f else 180f
-                            ),
+                            modifier = Modifier
+                                .rotate(if (isVoiceRecordingsSectionExpanded) 0f else 180f)
+                                .size(20.dp),
                             tint = Color.Gray
                         )
                     }
@@ -1248,7 +1248,7 @@ fun NoteEditorScreen(
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically()
                     ) {
-                        Column {
+                        Column(modifier = Modifier.padding(vertical = 2.dp)) {
                             // Display voice recordings
                             voiceRecordings.forEach { recording ->
                                 VoiceRecordingItem(
@@ -1276,7 +1276,7 @@ fun NoteEditorScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 2.dp)
                 ) {
                     // Add collapsible header with state
                     var isAttachmentSectionExpanded by remember { mutableStateOf(false) }
@@ -1286,13 +1286,13 @@ fun NoteEditorScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { isAttachmentSectionExpanded = !isAttachmentSectionExpanded }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
                             text = "Attachments",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = Color.DarkGray
                         )
                         
@@ -1301,9 +1301,9 @@ fun NoteEditorScreen(
                             imageVector = Icons.Default.KeyboardArrowUp,
                             contentDescription = if (isAttachmentSectionExpanded) 
                                 "Collapse" else "Expand",
-                            modifier = Modifier.rotate(
-                                if (isAttachmentSectionExpanded) 0f else 180f
-                            ),
+                            modifier = Modifier
+                                .rotate(if (isAttachmentSectionExpanded) 0f else 180f)
+                                .size(20.dp),
                             tint = Color.Gray
                         )
                     }
@@ -1314,7 +1314,7 @@ fun NoteEditorScreen(
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically()
                     ) {
-                        Column {
+                        Column(modifier = Modifier.padding(vertical = 2.dp)) {
                             // Display file attachments
                             fileAttachments.forEach { attachment ->
                                 FileAttachmentItem(
