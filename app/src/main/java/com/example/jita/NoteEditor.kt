@@ -1279,7 +1279,7 @@ fun NoteEditorScreen(
                         .padding(vertical = 8.dp)
                 ) {
                     // Add collapsible header with state
-                    var isAttachmentSectionExpanded by remember { mutableStateOf(true) }
+                    var isAttachmentSectionExpanded by remember { mutableStateOf(false) }
                     
                     // Header row with toggle
                     Row(
