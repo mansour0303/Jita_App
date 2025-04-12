@@ -78,6 +78,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.IOException
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.unit.DpSize
 
 // Define data class for checkbox items
 data class CheckboxItem(
@@ -1966,6 +1968,7 @@ fun VoiceRecordingDialog(
 }
 
 // Voice recording item to display in the note
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceRecordingItem(
     recording: VoiceRecording,
@@ -2158,7 +2161,16 @@ fun VoiceRecordingItem(
                         thumbColor = MaterialTheme.colorScheme.primary,
                         activeTrackColor = MaterialTheme.colorScheme.primary,
                         inactiveTrackColor = Color.LightGray
-                    )
+                    ),
+                    thumb = {
+                        SliderDefaults.Thumb(
+                            interactionSource = remember { MutableInteractionSource() },
+                            thumbSize = DpSize(12.dp, 12.dp),  // Smaller thumb size (default is typically 20dp)
+                            colors = SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
                 )
                 
                 // Total duration
