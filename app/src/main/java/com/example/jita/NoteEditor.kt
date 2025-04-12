@@ -116,6 +116,16 @@ data class TextStyleInfo(
     val fontName: String? = null
 )
 
+// Define data class for file attachments
+data class FileAttachment(
+    val id: String = UUID.randomUUID().toString(),
+    val fileName: String,
+    val filePath: String,
+    val fileSizeBytes: Long,
+    val mimeType: String,
+    val attachedAt: Long = System.currentTimeMillis()
+)
+
 // Define custom fonts
 val TimesRomanFontFamily = FontFamily(
     Font(R.font.times),
@@ -221,6 +231,10 @@ fun NoteEditorScreen(
     var showCheckboxWidget by remember { mutableStateOf(false) }
     // Replace single checkbox with a list of checkbox items
     var checkboxItems by remember { mutableStateOf(listOf<CheckboxItem>()) }
+
+    // Add state for file attachments
+    var fileAttachments by remember { mutableStateOf(listOf<FileAttachment>()) }
+    var showAttachmentSection by remember { mutableStateOf(true) }
 
     // Update selection tracking based on current text field selection
     LaunchedEffect(textFieldValue.selection) {
@@ -393,6 +407,16 @@ fun NoteEditorScreen(
                         android.util.Log.e("NoteEditor", "Error loading voice recordings: ${e.message}")
                     }
                     
+                    // Load file attachments if they exist
+                    try {
+                        it.fileAttachments?.let { attachmentsJson ->
+                            val attachmentsArray = JSONArray(attachmentsJson)
+                            fileAttachments = attachmentsArray.toFileAttachmentsList()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteEditor", "Error loading file attachments: ${e.message}")
+                    }
+                    
                     appliedStyles = it.styles?.let { jsonString ->
                         try {
                             JSONArray(jsonString).toList().map { item ->
@@ -426,11 +450,11 @@ fun NoteEditorScreen(
         }
     }
 
-    // Update save function to save text content with null check for folderId
+    // Update save function to save with file attachments
     fun saveNoteAndNavigate(navigateUp: Boolean = false) {
         scope.launch {
             // Only save if there's content
-            if (title.isNotBlank() || textFieldValue.text.isNotBlank() || checkboxItems.isNotEmpty()) {
+            if (title.isNotBlank() || textFieldValue.text.isNotBlank() || checkboxItems.isNotEmpty() || fileAttachments.isNotEmpty()) {
                 try {
                     // Create a copy of styles to ensure we capture current state
                     val stylesToSave = JSONArray(appliedStyles.map { style ->
@@ -474,6 +498,22 @@ fun NoteEditorScreen(
                     } else {
                         null
                     }
+                    
+                    // Save file attachments as JSON
+                    val fileAttachmentsJson = if (fileAttachments.isNotEmpty()) {
+                        JSONArray(fileAttachments.map { attachment ->
+                            JSONObject().apply {
+                                put("id", attachment.id)
+                                put("fileName", attachment.fileName)
+                                put("filePath", attachment.filePath)
+                                put("fileSizeBytes", attachment.fileSizeBytes)
+                                put("mimeType", attachment.mimeType)
+                                put("attachedAt", attachment.attachedAt)
+                            }
+                        }).toString()
+                    } else {
+                        null
+                    }
 
                     val note = if (noteId > 0) {
                         NoteEntity(
@@ -484,7 +524,8 @@ fun NoteEditorScreen(
                             updatedAt = noteTimestamp,
                             styles = stylesToSave,
                             checkboxItems = checkboxItemsJson,
-                            voiceRecordings = voiceRecordingsJson
+                            voiceRecordings = voiceRecordingsJson,
+                            fileAttachments = fileAttachmentsJson
                         )
                     } else {
                         NoteEntity(
@@ -495,7 +536,8 @@ fun NoteEditorScreen(
                             updatedAt = noteTimestamp,
                             styles = stylesToSave,
                             checkboxItems = checkboxItemsJson,
-                            voiceRecordings = voiceRecordingsJson
+                            voiceRecordings = voiceRecordingsJson,
+                            fileAttachments = fileAttachmentsJson
                         )
                     }
                     
@@ -763,6 +805,54 @@ fun NoteEditorScreen(
         backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
     )
 
+    // Add file picker launcher for selecting files
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                val newAttachments = uris.mapNotNull { uri ->
+                    try {
+                        // Create directory for attachments
+                        val attachmentDir = createAttachmentDirectory(context)
+                        
+                        // Get file details
+                        val fileName = getFileName(context, uri) ?: "unknown_file"
+                        val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                        
+                        // Create a unique file name to avoid collisions
+                        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                        val uniqueFileName = "${timestamp}_${fileName}"
+                        val targetFile = File(attachmentDir, uniqueFileName)
+                        
+                        // Copy the file to our directory
+                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                            targetFile.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+                        
+                        // Create attachment object
+                        FileAttachment(
+                            fileName = fileName,
+                            filePath = targetFile.absolutePath,
+                            fileSizeBytes = targetFile.length(),
+                            mimeType = mimeType
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteEditor", "Error adding attachment: ${e.message}")
+                        null
+                    }
+                }
+                
+                // Add new attachments to the list
+                if (newAttachments.isNotEmpty()) {
+                    fileAttachments = fileAttachments + newAttachments
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -846,8 +936,10 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // Link button for attaching files
-                    IconButton(onClick = { /* Attach files */ }) {
+                    // Link button for attaching files - Updated to use file picker
+                    IconButton(onClick = { 
+                        filePickerLauncher.launch("*/*") 
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Link,
                             contentDescription = "Attach Files",
@@ -1167,6 +1259,77 @@ fun NoteEditorScreen(
                                     },
                                     onDelete = {
                                         voiceRecordings = voiceRecordings.filter { it.id != recording.id }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // File Attachments section - display if there are any attachments
+            AnimatedVisibility(
+                visible = fileAttachments.isNotEmpty(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    // Add collapsible header with state
+                    var isAttachmentSectionExpanded by remember { mutableStateOf(true) }
+                    
+                    // Header row with toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isAttachmentSectionExpanded = !isAttachmentSectionExpanded }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Attachments",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.DarkGray
+                        )
+                        
+                        // Arrow icon that rotates based on expanded state
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = if (isAttachmentSectionExpanded) 
+                                "Collapse" else "Expand",
+                            modifier = Modifier.rotate(
+                                if (isAttachmentSectionExpanded) 0f else 180f
+                            ),
+                            tint = Color.Gray
+                        )
+                    }
+                    
+                    // Collapsible content
+                    AnimatedVisibility(
+                        visible = isAttachmentSectionExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column {
+                            // Display file attachments
+                            fileAttachments.forEach { attachment ->
+                                FileAttachmentItem(
+                                    attachment = attachment,
+                                    onDelete = {
+                                        fileAttachments = fileAttachments.filter { it.id != attachment.id }
+                                        // Also delete the physical file
+                                        try {
+                                            File(attachment.filePath).delete()
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("NoteEditor", "Error deleting file: ${e.message}")
+                                        }
+                                    },
+                                    onDownload = { downloadLocation ->
+                                        downloadAttachmentToCustomLocation(context, attachment, downloadLocation)
                                     }
                                 )
                             }
@@ -2327,6 +2490,237 @@ fun VoiceRecordingItem(
                     color = Color.Gray,
                     modifier = Modifier.width(50.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.End
+                )
+            }
+        }
+    }
+}
+
+// Helper functions for file attachments
+private fun createAttachmentDirectory(context: android.content.Context): File {
+    val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_notes/attachments")
+    if (!directory.exists()) {
+        directory.mkdirs()
+    }
+    return directory
+}
+
+private fun getFileName(context: android.content.Context, uri: android.net.Uri): String? {
+    var result: String? = null
+    if (uri.scheme == "content") {
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) {
+                    result = it.getString(nameIndex)
+                }
+            }
+        }
+    }
+    if (result == null) {
+        result = uri.path
+        val cut = result?.lastIndexOf('/')
+        if (cut != -1 && cut != null) {
+            result = result?.substring(cut + 1)
+        }
+    }
+    return result
+}
+
+private fun downloadAttachmentToCustomLocation(context: android.content.Context, attachment: FileAttachment, downloadLocation: android.net.Uri?) {
+    if (downloadLocation == null) return
+    
+    try {
+        context.contentResolver.openOutputStream(downloadLocation)?.use { outputStream ->
+            File(attachment.filePath).inputStream().use { inputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NoteEditor", "Error downloading attachment: ${e.message}")
+    }
+}
+
+// Convert JSON array to file attachments list
+private fun JSONArray?.toFileAttachmentsList(): List<FileAttachment> {
+    if (this == null) return emptyList()
+    
+    return try {
+        val attachments = mutableListOf<FileAttachment>()
+        for (i in 0 until this.length()) {
+            val item = this.getJSONObject(i)
+            attachments.add(
+                FileAttachment(
+                    id = item.optString("id", UUID.randomUUID().toString()),
+                    fileName = item.optString("fileName", "Unnamed file"),
+                    filePath = item.optString("filePath", ""),
+                    fileSizeBytes = item.optLong("fileSizeBytes", 0),
+                    mimeType = item.optString("mimeType", "application/octet-stream"),
+                    attachedAt = item.optLong("attachedAt", System.currentTimeMillis())
+                )
+            )
+        }
+        attachments
+    } catch (e: Exception) {
+        android.util.Log.e("NoteEditor", "Error parsing file attachments: ${e.message}")
+        emptyList()
+    }
+}
+
+// File attachment item UI component
+@Composable
+fun FileAttachmentItem(
+    attachment: FileAttachment,
+    onDelete: () -> Unit,
+    onDownload: (android.net.Uri?) -> Unit
+) {
+    val context = LocalContext.current
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    
+    // Format file size
+    val formattedSize = remember(attachment.fileSizeBytes) {
+        when {
+            attachment.fileSizeBytes < 1024 -> "${attachment.fileSizeBytes} B"
+            attachment.fileSizeBytes < 1024 * 1024 -> "${attachment.fileSizeBytes / 1024} KB"
+            else -> String.format("%.1f MB", attachment.fileSizeBytes / (1024.0 * 1024.0))
+        }
+    }
+    
+    // Format date
+    val formattedDate = remember(attachment.attachedAt) {
+        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(attachment.attachedAt))
+    }
+    
+    // File download launcher
+    val downloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri -> 
+        onDownload(uri)
+    }
+    
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Attachment") },
+            text = { Text("Are you sure you want to delete this attachment?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Icon based on mime type
+    val fileIcon = remember(attachment.mimeType) {
+        when {
+            attachment.mimeType.startsWith("image/") -> Icons.Default.Image
+            attachment.mimeType.startsWith("audio/") -> Icons.Default.MusicNote
+            attachment.mimeType.startsWith("video/") -> Icons.Default.Videocam
+            attachment.mimeType.startsWith("text/") -> Icons.Default.TextSnippet
+            attachment.mimeType.contains("pdf") -> Icons.Default.PictureAsPdf
+            attachment.mimeType.contains("word") || attachment.mimeType.contains("document") -> Icons.Default.Description
+            attachment.mimeType.contains("excel") || attachment.mimeType.contains("sheet") -> Icons.Default.GridOn
+            attachment.mimeType.contains("presentation") || attachment.mimeType.contains("powerpoint") -> Icons.Default.Preview
+            else -> Icons.Default.AttachFile
+        }
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF5F5F5)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // File icon
+            Icon(
+                imageVector = fileIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+            
+            // File details
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+            ) {
+                Text(
+                    text = attachment.fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.DarkGray
+                )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = formattedSize,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Text(
+                        text = "•",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Text(
+                        text = formattedDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+            
+            // Download button
+            IconButton(
+                onClick = { 
+                    downloadLauncher.launch(attachment.fileName)
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FileDownload,
+                    contentDescription = "Download",
+                    tint = Color.Gray
+                )
+            }
+            
+            // Delete button
+            IconButton(
+                onClick = { showDeleteConfirmation = true }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Attachment",
+                    tint = Color.Gray
                 )
             }
         }

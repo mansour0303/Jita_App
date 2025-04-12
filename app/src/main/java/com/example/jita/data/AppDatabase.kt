@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TaskEntity::class, ListNameEntity::class, NoteEntity::class, FolderEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class)
@@ -170,6 +170,54 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 8 to 9 (adding voiceRecordings and fileAttachments columns to notes table)
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Check and add columns only if they don't exist
+                // First, get column information for the notes table
+                val tableInfo = database.query("PRAGMA table_info(notes)")
+                val columnNames = mutableSetOf<String>()
+                
+                // Collect existing column names
+                tableInfo.use {
+                    while (it.moveToNext()) {
+                        val columnName = it.getString(it.getColumnIndex("name"))
+                        columnNames.add(columnName)
+                    }
+                }
+                
+                // Add voiceRecordings column if it doesn't exist
+                if (!columnNames.contains("voiceRecordings")) {
+                    database.execSQL("ALTER TABLE notes ADD COLUMN voiceRecordings TEXT")
+                }
+                
+                // Add fileAttachments column if it doesn't exist
+                if (!columnNames.contains("fileAttachments")) {
+                    database.execSQL("ALTER TABLE notes ADD COLUMN fileAttachments TEXT")
+                }
+                
+                // Add color column if it doesn't exist
+                if (!columnNames.contains("color")) {
+                    database.execSQL("ALTER TABLE notes ADD COLUMN color TEXT")
+                }
+                
+                // Add isArchived column if it doesn't exist
+                if (!columnNames.contains("isArchived")) {
+                    database.execSQL("ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0")
+                }
+                
+                // Add isPinned column if it doesn't exist
+                if (!columnNames.contains("isPinned")) {
+                    database.execSQL("ALTER TABLE notes ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+                }
+                
+                // Add isDeleted column if it doesn't exist
+                if (!columnNames.contains("isDeleted")) {
+                    database.execSQL("ALTER TABLE notes ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             // if the INSTANCE is not null, then return it,
             // if it is, then create the database
@@ -179,7 +227,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .fallbackToDestructiveMigration() // Add this to handle severe migration issues
                 .build()
                 INSTANCE = instance
