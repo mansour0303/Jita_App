@@ -86,6 +86,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.core.content.FileProvider
+import android.content.Intent
 
 // Define data class for checkbox items
 data class CheckboxItem(
@@ -2599,6 +2601,66 @@ fun FileAttachmentItem(
         onDownload(uri)
     }
     
+    // Function to open the file
+    fun openFile() {
+        try {
+            val file = File(attachment.filePath)
+            if (file.exists()) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, attachment.mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                // Check if there's an app that can handle this file type
+                val packageManager = context.packageManager
+                if (intent.resolveActivity(packageManager) != null) {
+                    context.startActivity(intent)
+                } else {
+                    // If no app can handle this file type directly, try with a more generic mime type
+                    val genericIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "*/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    
+                    try {
+                        context.startActivity(Intent.createChooser(
+                            genericIntent, 
+                            "Open ${attachment.fileName} with..."
+                        ))
+                    } catch (e: Exception) {
+                        // Show toast if no app can open the file
+                        android.widget.Toast.makeText(
+                            context,
+                            "No application found that can open this file type",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } else {
+                // Show toast if file doesn't exist
+                android.widget.Toast.makeText(
+                    context,
+                    "File not found",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FileAttachmentItem", "Error opening file: ${e.message}")
+            // Show error toast
+            android.widget.Toast.makeText(
+                context,
+                "Error opening file: ${e.message}",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
     // Delete confirmation dialog
     if (showDeleteConfirmation) {
         AlertDialog(
@@ -2643,7 +2705,8 @@ fun FileAttachmentItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .clickable { openFile() },
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFFF5F5F5)
