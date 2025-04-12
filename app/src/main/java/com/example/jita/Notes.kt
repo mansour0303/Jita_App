@@ -189,22 +189,25 @@ fun NotesScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { 
-                    // Navigate to note editor screen with default values
-                    // Allow creating notes without a folder as well
-                    if (currentFolderId != null) {
-                        // Set the current folder ID in the savedStateHandle
-                        navController.currentBackStackEntry?.savedStateHandle?.set("currentFolderId", currentFolderId)
-                    }
-                    navController.navigate(AppDestinations.createNoteEditorRoute(-1))
-                },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add Note"
-                )
+            // Only show FAB when inside a folder
+            if (currentFolderId != null) {
+                FloatingActionButton(
+                    onClick = { 
+                        // Navigate to note editor screen with default values
+                        // Allow creating notes without a folder as well
+                        if (currentFolderId != null) {
+                            // Set the current folder ID in the savedStateHandle
+                            navController.currentBackStackEntry?.savedStateHandle?.set("currentFolderId", currentFolderId)
+                        }
+                        navController.navigate(AppDestinations.createNoteEditorRoute(-1))
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Note"
+                    )
+                }
             }
         }
     ) { paddingValues ->
