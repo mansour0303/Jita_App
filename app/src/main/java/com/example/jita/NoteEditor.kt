@@ -1979,6 +1979,9 @@ fun VoiceRecordingItem(
     var currentPosition by remember { mutableStateOf(0) }
     var totalDuration by remember { mutableStateOf(recording.durationMs.toInt()) }
     
+    // Add state for delete confirmation dialog
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    
     // Timer to update current position during playback
     val handler = remember { Handler(Looper.getMainLooper()) }
     
@@ -2069,6 +2072,32 @@ fun VoiceRecordingItem(
         currentPosition = position
     }
     
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Recording") },
+            text = { Text("Are you sure you want to delete this voice recording?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2122,9 +2151,9 @@ fun VoiceRecordingItem(
                     }
                 }
                 
-                // Delete button
+                // Delete button - updated to show confirmation dialog
                 IconButton(
-                    onClick = { onDelete() }
+                    onClick = { showDeleteConfirmation = true }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
