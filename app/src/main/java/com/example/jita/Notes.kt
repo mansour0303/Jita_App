@@ -224,14 +224,14 @@ fun NotesScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Note,
+                        imageVector = Icons.Default.Folder,
                         contentDescription = null,
                         modifier = Modifier.size(72.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("No notes or folders yet")
-                    Text("Create a new note or folder to get started")
+                    Text("No folders yet")
+                    Text("Create a new folder to get started")
                 }
             }
         } else {
