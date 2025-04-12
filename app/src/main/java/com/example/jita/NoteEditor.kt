@@ -110,7 +110,14 @@ fun NoteEditorScreen(
     }
     
     // Track if text is currently selected
-    val isTextSelected = textFieldValue.selection.start != textFieldValue.selection.end
+    var isTextSelected by remember { 
+        mutableStateOf(false) 
+    }
+
+    // Update selection tracking based on current text field selection
+    LaunchedEffect(textFieldValue.selection) {
+        isTextSelected = textFieldValue.selection.start != textFieldValue.selection.end
+    }
 
     // State for formatting toolbar
     var showFormattingToolbar by remember { mutableStateOf(false) }
@@ -138,8 +145,8 @@ fun NoteEditorScreen(
     var noteFolderId by remember { mutableStateOf(folderId) }
 
     // Function to regenerate text with all applied styles
-    fun regenerateStyledText(text: String): AnnotatedString {
-        return buildAnnotatedString {
+    val regenerateStyledText = remember { { text: String ->
+        buildAnnotatedString {
             append(text)
             
             // Apply all stored styles
@@ -234,7 +241,7 @@ fun NoteEditorScreen(
                 }
             }
         }
-    }
+    }}
 
     // If noteId exists, load it from database
     LaunchedEffect(noteId) {
@@ -341,24 +348,33 @@ fun NoteEditorScreen(
             style.start == start && style.end == end
         }
 
+        // Track if styles actually changed to avoid unnecessary regeneration
+        var stylesChanged = false
+
         if (existingStyleIndex >= 0) {
             // Update existing style
             val updatedStyles = appliedStyles.toMutableList()
-            val updatedStyle = styleUpdate(updatedStyles[existingStyleIndex])
+            val oldStyle = updatedStyles[existingStyleIndex]
+            val updatedStyle = styleUpdate(oldStyle)
             
-            // If all style attributes are false/null/default, remove the style completely
-            if (!updatedStyle.isBold && 
-                !updatedStyle.isUnderlined && 
-                !updatedStyle.isStrikethrough && 
-                updatedStyle.fontSize == null && 
-                updatedStyle.textColor == null && 
-                updatedStyle.backgroundColor == null &&
-                updatedStyle.fontName == null) {
-                updatedStyles.removeAt(existingStyleIndex)
-            } else {
-                updatedStyles[existingStyleIndex] = updatedStyle
+            // Only update if the style actually changed
+            if (oldStyle != updatedStyle) {
+                stylesChanged = true
+                
+                // If all style attributes are false/null/default, remove the style completely
+                if (!updatedStyle.isBold && 
+                    !updatedStyle.isUnderlined && 
+                    !updatedStyle.isStrikethrough && 
+                    updatedStyle.fontSize == null && 
+                    updatedStyle.textColor == null && 
+                    updatedStyle.backgroundColor == null &&
+                    updatedStyle.fontName == null) {
+                    updatedStyles.removeAt(existingStyleIndex)
+                } else {
+                    updatedStyles[existingStyleIndex] = updatedStyle
+                }
+                appliedStyles = updatedStyles
             }
-            appliedStyles = updatedStyles
         } else {
             // Create new style
             val newStyle = TextStyleInfo(start, end)
@@ -373,17 +389,21 @@ fun NoteEditorScreen(
                 updatedStyle.backgroundColor != null ||
                 updatedStyle.fontName != null) {
                 appliedStyles = appliedStyles + updatedStyle
+                stylesChanged = true
             }
         }
         
-        // Reapply all styles to ensure they persist
-        val annotatedString = regenerateStyledText(textFieldValue.text)
-        
-        // Preserve selection
-        textFieldValue = TextFieldValue(
-            annotatedString,
-            selection = textFieldValue.selection
-        )
+        // Only regenerate text if styles actually changed
+        if (stylesChanged) {
+            // Reapply all styles to ensure they persist
+            val annotatedString = regenerateStyledText(textFieldValue.text)
+            
+            // Preserve selection
+            textFieldValue = TextFieldValue(
+                annotatedString,
+                selection = textFieldValue.selection
+            )
+        }
     }
 
     // Functions to apply formatting only to selected text
@@ -393,12 +413,16 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
+        // Sort selection if needed (in case user selected from end to start)
+        val start = minOf(selectionStart, selectionEnd)
+        val end = maxOf(selectionStart, selectionEnd)
+
         // Check if we need to toggle on or off
-        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val existingStyle = appliedStyles.find { it.start == start && it.end == end }
         val shouldToggleOff = existingStyle?.isBold == true
 
         // Record the applied style with toggle behavior
-        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+        recordStyle(start, end) { styleInfo ->
             styleInfo.copy(isBold = !shouldToggleOff)
         }
     }
@@ -410,12 +434,16 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
+        // Sort selection if needed
+        val start = minOf(selectionStart, selectionEnd)
+        val end = maxOf(selectionStart, selectionEnd)
+
         // Check if we need to toggle on or off
-        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val existingStyle = appliedStyles.find { it.start == start && it.end == end }
         val shouldToggleOff = existingStyle?.isUnderlined == true
 
         // Record the applied style with toggle behavior
-        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+        recordStyle(start, end) { styleInfo ->
             styleInfo.copy(isUnderlined = !shouldToggleOff)
         }
     }
@@ -426,12 +454,16 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
+        // Sort selection if needed
+        val start = minOf(selectionStart, selectionEnd)
+        val end = maxOf(selectionStart, selectionEnd)
+
         // Check if we need to toggle on or off
-        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val existingStyle = appliedStyles.find { it.start == start && it.end == end }
         val shouldToggleOff = existingStyle?.isStrikethrough == true
 
         // Record the applied style with toggle behavior
-        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+        recordStyle(start, end) { styleInfo ->
             styleInfo.copy(isStrikethrough = !shouldToggleOff)
         }
     }
@@ -442,12 +474,16 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
+        // Sort selection if needed
+        val start = minOf(selectionStart, selectionEnd)
+        val end = maxOf(selectionStart, selectionEnd)
+
         // Check if we need to toggle on or off
-        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val existingStyle = appliedStyles.find { it.start == start && it.end == end }
         val shouldToggleOff = existingStyle?.fontSize == fontSize
 
         // Record the applied style with toggle behavior
-        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+        recordStyle(start, end) { styleInfo ->
             styleInfo.copy(fontSize = if (shouldToggleOff) null else fontSize)
         }
 
@@ -460,16 +496,20 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
         
+        // Sort selection if needed
+        val start = minOf(selectionStart, selectionEnd)
+        val end = maxOf(selectionStart, selectionEnd)
+        
         try {
             // Convert color to hex format
             val colorHex = String.format("#%08X", color.toArgb())
 
             // Check if we need to toggle on or off
-            val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+            val existingStyle = appliedStyles.find { it.start == start && it.end == end }
             val shouldToggleOff = existingStyle?.textColor == colorHex
 
             // Record the applied style with toggle behavior
-            recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            recordStyle(start, end) { styleInfo ->
                 styleInfo.copy(textColor = if (shouldToggleOff) null else colorHex)
             }
 
@@ -486,16 +526,20 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
         
+        // Sort selection if needed
+        val start = minOf(selectionStart, selectionEnd)
+        val end = maxOf(selectionStart, selectionEnd)
+        
         try {
             // Convert color to hex format (with alpha)
             val colorHex = String.format("#%08X", color.toArgb())
 
             // Check if we need to toggle on or off
-            val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+            val existingStyle = appliedStyles.find { it.start == start && it.end == end }
             val shouldToggleOff = existingStyle?.backgroundColor == colorHex
 
             // Record the applied style with toggle behavior
-            recordStyle(selectionStart, selectionEnd) { styleInfo ->
+            recordStyle(start, end) { styleInfo ->
                 styleInfo.copy(backgroundColor = if (shouldToggleOff) null else colorHex)
             }
 
@@ -513,12 +557,16 @@ fun NoteEditorScreen(
         val selectionStart = textFieldValue.selection.start
         val selectionEnd = textFieldValue.selection.end
 
+        // Sort selection if needed
+        val start = minOf(selectionStart, selectionEnd)
+        val end = maxOf(selectionStart, selectionEnd)
+
         // Check if we need to toggle on or off
-        val existingStyle = appliedStyles.find { it.start == selectionStart && it.end == selectionEnd }
+        val existingStyle = appliedStyles.find { it.start == start && it.end == end }
         val shouldToggleOff = existingStyle?.fontName == fontName
 
         // Record the applied style with toggle behavior
-        recordStyle(selectionStart, selectionEnd) { styleInfo ->
+        recordStyle(start, end) { styleInfo ->
             styleInfo.copy(fontName = if (shouldToggleOff) null else fontName)
         }
 
@@ -815,14 +863,26 @@ fun NoteEditorScreen(
                                 }
                             }
                             
-                            // Regenerate styled text
-                            val newAnnotatedString = regenerateStyledText(newValue.text)
-                            
-                            // Update text field value with styles and preserve selection
-                            textFieldValue = TextFieldValue(
-                                newAnnotatedString,
-                                selection = currentSelection
-                            )
+                            // Only regenerate styled text if needed
+                            val shouldRegenerate = textFieldValue.text != newValue.text || 
+                                                 (isTextSelected != (newValue.selection.start != newValue.selection.end))
+                                                 
+                            if (shouldRegenerate) {
+                                // Update if text is selected
+                                isTextSelected = newValue.selection.start != newValue.selection.end
+                                
+                                // Regenerate styled text
+                                val newAnnotatedString = regenerateStyledText(newValue.text)
+                                
+                                // Update text field value with styles and preserve selection
+                                textFieldValue = TextFieldValue(
+                                    newAnnotatedString,
+                                    selection = currentSelection
+                                )
+                            } else {
+                                // Just update the selection without regenerating styles
+                                textFieldValue = textFieldValue.copy(selection = currentSelection)
+                            }
                         },
                         textStyle = TextStyle(
                             fontSize = 16.sp,
