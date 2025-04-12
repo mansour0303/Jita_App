@@ -1973,6 +1973,11 @@ fun VoiceRecordingItem(
 ) {
     var isPlaying by remember { mutableStateOf(false) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var currentPosition by remember { mutableStateOf(0) }
+    var totalDuration by remember { mutableStateOf(recording.durationMs.toInt()) }
+    
+    // Timer to update current position during playback
+    val handler = remember { Handler(Looper.getMainLooper()) }
     
     // Format duration
     fun formatDuration(durationMs: Long): String {
@@ -1986,9 +1991,32 @@ fun VoiceRecordingItem(
         SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(recording.recordedAt))
     }
     
+    // Update position when playing
+    LaunchedEffect(isPlaying) {
+        val positionUpdater = object : Runnable {
+            override fun run() {
+                if (isPlaying && mediaPlayer != null) {
+                    try {
+                        currentPosition = mediaPlayer?.currentPosition ?: 0
+                        handler.postDelayed(this, 100)
+                    } catch (e: Exception) {
+                        // Handle error
+                    }
+                }
+            }
+        }
+        
+        if (isPlaying) {
+            handler.post(positionUpdater)
+        } else {
+            handler.removeCallbacksAndMessages(null)
+        }
+    }
+    
     // Clean up media player when component is disposed
     DisposableEffect(Unit) {
         onDispose {
+            handler.removeCallbacksAndMessages(null)
             mediaPlayer?.apply {
                 if (isPlaying) {
                     stop()
@@ -2004,30 +2032,38 @@ fun VoiceRecordingItem(
         if (isPlaying) {
             mediaPlayer?.apply {
                 if (isPlaying()) {
-                    stop()
+                    pause()
                 }
-                release()
             }
-            mediaPlayer = null
             isPlaying = false
         } else {
             try {
-                mediaPlayer = MediaPlayer().apply {
-                    setDataSource(recording.filePath)
-                    prepare()
-                    start()
-                    
-                    setOnCompletionListener {
-                        isPlaying = false
-                        mediaPlayer?.release()
-                        mediaPlayer = null
+                if (mediaPlayer == null) {
+                    mediaPlayer = MediaPlayer().apply {
+                        setDataSource(recording.filePath)
+                        prepare()
+                        totalDuration = duration
+                        
+                        setOnCompletionListener {
+                            isPlaying = false
+                            currentPosition = 0
+                            // Don't release, allow for replay
+                        }
                     }
                 }
+                
+                mediaPlayer?.start()
                 isPlaying = true
             } catch (e: Exception) {
                 android.util.Log.e("VoiceRecordingItem", "Error playing recording: ${e.message}")
             }
         }
+    }
+    
+    // Function to seek to position
+    fun seekTo(position: Int) {
+        mediaPlayer?.seekTo(position)
+        currentPosition = position
     }
     
     Card(
@@ -2039,67 +2075,99 @@ fun VoiceRecordingItem(
             containerColor = Color(0xFFF5F5F5)
         )
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(12.dp)
         ) {
-            // Play/pause button
-            IconButton(
-                onClick = { togglePlayback() }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            
-            // Recording info
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-            ) {
-                Text(
-                    text = recording.fileName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.DarkGray
-                )
+                // Play/pause button
+                IconButton(
+                    onClick = { togglePlayback() }
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Recording info
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
                 ) {
                     Text(
-                        text = formatDuration(recording.durationMs),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        text = recording.fileName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.DarkGray
                     )
                     
-                    Text(
-                        text = "•",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                    
-                    Text(
-                        text = formattedDate,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = formattedDate,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+                
+                // Delete button
+                IconButton(
+                    onClick = { onDelete() }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Recording",
+                        tint = Color.Gray
                     )
                 }
             }
             
-            // Delete button
-            IconButton(
-                onClick = { onDelete() }
+            // Scrubber and time display
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete Recording",
-                    tint = Color.Gray
+                // Current position
+                Text(
+                    text = formatDuration(currentPosition.toLong()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.width(50.dp)
+                )
+                
+                // Scrubber/slider
+                Slider(
+                    value = currentPosition.toFloat(),
+                    onValueChange = { newPosition -> 
+                        seekTo(newPosition.toInt())
+                    },
+                    valueRange = 0f..totalDuration.toFloat(),
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = Color.LightGray
+                    )
+                )
+                
+                // Total duration
+                Text(
+                    text = formatDuration(totalDuration.toLong()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.width(50.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End
                 )
             }
         }
