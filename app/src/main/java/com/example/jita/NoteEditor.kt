@@ -62,12 +62,37 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.ui.res.fontResource
 import com.example.jita.R
+// Audio recording imports
+import android.Manifest
+import android.content.pm.PackageManager
+import android.media.MediaPlayer
+import android.media.MediaRecorder
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.Environment
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
+import java.io.File
+import java.io.IOException
 
 // Define data class for checkbox items
 data class CheckboxItem(
     val id: String = UUID.randomUUID().toString(),
     var text: String = "Checkbox item",
     var isChecked: Boolean = false
+)
+
+// Define data class for voice recordings
+data class VoiceRecording(
+    val id: String = UUID.randomUUID().toString(),
+    val fileName: String,
+    val filePath: String,
+    val durationMs: Long,
+    val recordedAt: Long = System.currentTimeMillis()
 )
 
 // Define data classes for tracking rich text without Gson dependency
@@ -117,6 +142,46 @@ private fun JSONArray?.toCheckboxList(): List<CheckboxItem> {
         android.util.Log.e("NoteEditor", "Error parsing checkbox items: ${e.message}")
         emptyList()
     }
+}
+
+// Convert JSON array to voice recordings list
+private fun JSONArray?.toVoiceRecordingsList(): List<VoiceRecording> {
+    if (this == null) return emptyList()
+    
+    return try {
+        val recordings = mutableListOf<VoiceRecording>()
+        for (i in 0 until this.length()) {
+            val item = this.getJSONObject(i)
+            recordings.add(
+                VoiceRecording(
+                    id = item.optString("id", UUID.randomUUID().toString()),
+                    fileName = item.optString("fileName", "Recording"),
+                    filePath = item.optString("filePath", ""),
+                    durationMs = item.optLong("durationMs", 0),
+                    recordedAt = item.optLong("recordedAt", System.currentTimeMillis())
+                )
+            )
+        }
+        recordings
+    } catch (e: Exception) {
+        android.util.Log.e("NoteEditor", "Error parsing voice recordings: ${e.message}")
+        emptyList()
+    }
+}
+
+// Helper function to create necessary directories for voice recordings
+private fun createVoiceRecordingDirectory(context: android.content.Context): File {
+    val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_notes")
+    if (!directory.exists()) {
+        directory.mkdirs()
+    }
+    return directory
+}
+
+// Generate unique filename for voice recording
+private fun generateVoiceRecordingFilename(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "voice_recording_${timestamp}.mp3"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -178,6 +243,10 @@ fun NoteEditorScreen(
     
     // Track note's folder ID
     var noteFolderId by remember { mutableStateOf(folderId) }
+
+    // Add state for voice recordings
+    var voiceRecordings by remember { mutableStateOf(listOf<VoiceRecording>()) }
+    var showVoiceRecordingDialog by remember { mutableStateOf(false) }
 
     // Function to regenerate text with all applied styles
     val regenerateStyledText = remember { { text: String ->
@@ -306,6 +375,16 @@ fun NoteEditorScreen(
                         android.util.Log.e("NoteEditor", "Error loading checkbox items: ${e.message}")
                     }
                     
+                    // Load voice recordings if they exist
+                    try {
+                        it.voiceRecordings?.let { recordingsJson ->
+                            val recordingsArray = JSONArray(recordingsJson)
+                            voiceRecordings = recordingsArray.toVoiceRecordingsList()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteEditor", "Error loading voice recordings: ${e.message}")
+                    }
+                    
                     appliedStyles = it.styles?.let { jsonString ->
                         try {
                             JSONArray(jsonString).toList().map { item ->
@@ -372,6 +451,21 @@ fun NoteEditorScreen(
                     } else {
                         null
                     }
+                    
+                    // Save voice recordings as JSON
+                    val voiceRecordingsJson = if (voiceRecordings.isNotEmpty()) {
+                        JSONArray(voiceRecordings.map { recording ->
+                            JSONObject().apply {
+                                put("id", recording.id)
+                                put("fileName", recording.fileName)
+                                put("filePath", recording.filePath)
+                                put("durationMs", recording.durationMs)
+                                put("recordedAt", recording.recordedAt)
+                            }
+                        }).toString()
+                    } else {
+                        null
+                    }
 
                     val note = if (noteId > 0) {
                         NoteEntity(
@@ -381,7 +475,8 @@ fun NoteEditorScreen(
                             folderId = noteFolderId,
                             updatedAt = noteTimestamp,
                             styles = stylesToSave,
-                            checkboxItems = checkboxItemsJson
+                            checkboxItems = checkboxItemsJson,
+                            voiceRecordings = voiceRecordingsJson
                         )
                     } else {
                         NoteEntity(
@@ -391,7 +486,8 @@ fun NoteEditorScreen(
                             createdAt = noteTimestamp,
                             updatedAt = noteTimestamp,
                             styles = stylesToSave,
-                            checkboxItems = checkboxItemsJson
+                            checkboxItems = checkboxItemsJson,
+                            voiceRecordings = voiceRecordingsJson
                         )
                     }
                     
@@ -732,10 +828,12 @@ fun NoteEditorScreen(
                     }
 
                     // Voice input button
-                    IconButton(onClick = { /* Voice input */ }) {
+                    IconButton(onClick = { 
+                        showVoiceRecordingDialog = true
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Mic,
-                            contentDescription = "Voice Input",
+                            contentDescription = "Voice Recording",
                             tint = Color.DarkGray
                         )
                     }
@@ -1003,6 +1101,36 @@ fun NoteEditorScreen(
                 }
             }
 
+            // Voice Recordings section - display if there are any recordings
+            AnimatedVisibility(
+                visible = voiceRecordings.isNotEmpty(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "Voice Recordings",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.DarkGray,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    
+                    // Display voice recordings
+                    voiceRecordings.forEach { recording ->
+                        VoiceRecordingItem(
+                            recording = recording,
+                            onDelete = {
+                                voiceRecordings = voiceRecordings.filter { it.id != recording.id }
+                            }
+                        )
+                    }
+                }
+            }
+
             // Content field with rich text support
             CompositionLocalProvider(LocalTextSelectionColors provides customTextSelectionColors) {
                 SelectionContainer {
@@ -1100,6 +1228,19 @@ fun NoteEditorScreen(
     // Update BackHandler to use the saveNote function
     BackHandler {
         saveNoteAndNavigate(navigateUp = true)
+    }
+
+    // Display voice recording dialog when active
+    if (showVoiceRecordingDialog) {
+        VoiceRecordingDialog(
+            onDismiss = { 
+                showVoiceRecordingDialog = false 
+            },
+            onSaveRecording = { recording ->
+                voiceRecordings = voiceRecordings + recording
+                showVoiceRecordingDialog = false
+            }
+        )
     }
 
     // Set focus to title when screen is first displayed if creating a new note
@@ -1572,6 +1713,394 @@ private fun TextFormattingToolbar(
                             }
                     )
                 }
+            }
+        }
+    }
+}
+
+// Voice recording dialog
+@Composable
+fun VoiceRecordingDialog(
+    onDismiss: () -> Unit,
+    onSaveRecording: (VoiceRecording) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // States for recording
+    var isRecording by remember { mutableStateOf(false) }
+    var recordingDuration by remember { mutableStateOf(0L) }
+    var recordingFile by remember { mutableStateOf<File?>(null) }
+    var mediaRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
+    val handler = remember { Handler(Looper.getMainLooper()) }
+    val updateInterval = 100L // Update timer every 100ms
+    
+    // Format duration as mm:ss
+    fun formatDuration(durationMs: Long): String {
+        val seconds = (durationMs / 1000) % 60
+        val minutes = (durationMs / (1000 * 60)) % 60
+        return String.format("%02d:%02d", minutes, seconds)
+    }
+    
+    // Function to stop recording - must be declared before startRecording since it's used there
+    fun stopRecording(save: Boolean) {
+        if (isRecording && mediaRecorder != null) {
+            try {
+                mediaRecorder?.apply {
+                    stop()
+                    release()
+                }
+                
+                isRecording = false
+                
+                // Save recording if requested
+                if (save && recordingFile != null) {
+                    val recording = VoiceRecording(
+                        fileName = recordingFile?.name ?: "voice_recording.mp3",
+                        filePath = recordingFile?.absolutePath ?: "",
+                        durationMs = recordingDuration
+                    )
+                    onSaveRecording(recording)
+                } else {
+                    // Delete file if not saving
+                    recordingFile?.delete()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("VoiceRecordingDialog", "Error stopping recording: ${e.message}")
+                recordingFile?.delete()
+            }
+        }
+        
+        mediaRecorder = null
+    }
+    
+    // Function to start recording
+    fun startRecording() {
+        try {
+            // Create directory
+            val recordingDir = createVoiceRecordingDirectory(context)
+            val fileName = generateVoiceRecordingFilename()
+            recordingFile = File(recordingDir, fileName)
+            
+            // Initialize media recorder
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaRecorder()
+            }
+            
+            mediaRecorder?.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(recordingFile?.absolutePath)
+                setAudioSamplingRate(44100)
+                setAudioEncodingBitRate(128000)
+                
+                try {
+                    prepare()
+                    start()
+                    isRecording = true
+                    recordingDuration = 0L
+                    
+                    // Start timer
+                    val startTime = System.currentTimeMillis()
+                    handler.post(object : Runnable {
+                        override fun run() {
+                            if (isRecording) {
+                                recordingDuration = System.currentTimeMillis() - startTime
+                                handler.postDelayed(this, updateInterval)
+                            }
+                        }
+                    })
+                } catch (e: IOException) {
+                    android.util.Log.e("VoiceRecordingDialog", "Failed to start recording: ${e.message}")
+                    stopRecording(save = false)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("VoiceRecordingDialog", "Error starting recording: ${e.message}")
+            onDismiss()
+        }
+    }
+    
+    // Permissions
+    val hasRecordPermission = remember {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+    
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Start recording automatically after permission granted
+            startRecording()
+        } else {
+            // Permission denied, dismiss dialog
+            onDismiss()
+        }
+    }
+    
+    // Check and request permission when dialog opens
+    LaunchedEffect(Unit) {
+        if (!hasRecordPermission) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    
+    // Cleanup when dialog is dismissed
+    DisposableEffect(Unit) {
+        onDispose {
+            stopRecording(save = false)
+        }
+    }
+    
+    // Start recording on first render if permission is granted
+    LaunchedEffect(hasRecordPermission) {
+        if (hasRecordPermission && !isRecording) {
+            startRecording()
+        }
+    }
+    
+    Dialog(
+        onDismissRequest = {
+            stopRecording(save = false)
+            onDismiss()
+        },
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Voice Recording",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.Black
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Recording animation
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .background(
+                            if (isRecording) Color.Red.copy(alpha = 0.1f) else Color.Gray.copy(alpha = 0.1f),
+                            CircleShape
+                        )
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Recording",
+                        tint = if (isRecording) Color.Red else Color.Gray,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Timer
+                Text(
+                    text = formatDuration(recordingDuration),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = if (isRecording) Color.Red else Color.Gray
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            stopRecording(save = false)
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Gray
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                    
+                    Button(
+                        onClick = {
+                            if (isRecording) {
+                                stopRecording(save = true)
+                            } else {
+                                startRecording()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isRecording) MaterialTheme.colorScheme.primary else Color.Red
+                        )
+                    ) {
+                        Text(if (isRecording) "Stop & Save" else "Record")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Voice recording item to display in the note
+@Composable
+fun VoiceRecordingItem(
+    recording: VoiceRecording,
+    onDelete: () -> Unit
+) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    
+    // Format duration
+    fun formatDuration(durationMs: Long): String {
+        val seconds = (durationMs / 1000) % 60
+        val minutes = (durationMs / (1000 * 60)) % 60
+        return String.format("%02d:%02d", minutes, seconds)
+    }
+    
+    // Format date
+    val formattedDate = remember(recording.recordedAt) {
+        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(recording.recordedAt))
+    }
+    
+    // Clean up media player when component is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayer?.apply {
+                if (isPlaying) {
+                    stop()
+                }
+                release()
+            }
+            mediaPlayer = null
+        }
+    }
+    
+    // Function to play/pause recording
+    fun togglePlayback() {
+        if (isPlaying) {
+            mediaPlayer?.apply {
+                if (isPlaying()) {
+                    stop()
+                }
+                release()
+            }
+            mediaPlayer = null
+            isPlaying = false
+        } else {
+            try {
+                mediaPlayer = MediaPlayer().apply {
+                    setDataSource(recording.filePath)
+                    prepare()
+                    start()
+                    
+                    setOnCompletionListener {
+                        isPlaying = false
+                        mediaPlayer?.release()
+                        mediaPlayer = null
+                    }
+                }
+                isPlaying = true
+            } catch (e: Exception) {
+                android.util.Log.e("VoiceRecordingItem", "Error playing recording: ${e.message}")
+            }
+        }
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF5F5F5)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Play/pause button
+            IconButton(
+                onClick = { togglePlayback() }
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            // Recording info
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+            ) {
+                Text(
+                    text = recording.fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.DarkGray
+                )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = formatDuration(recording.durationMs),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Text(
+                        text = "•",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Text(
+                        text = formattedDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+            
+            // Delete button
+            IconButton(
+                onClick = { onDelete() }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Recording",
+                    tint = Color.Gray
+                )
             }
         }
     }

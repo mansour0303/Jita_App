@@ -24,5 +24,6 @@ data class NoteEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val styles: String? = null,
-    val checkboxItems: String? = null
+    val checkboxItems: String? = null,
+    val voiceRecordings: String? = null // JSON array of voice recording paths
 ) 
