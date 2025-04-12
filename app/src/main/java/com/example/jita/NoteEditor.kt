@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -1114,21 +1115,53 @@ fun NoteEditorScreen(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    Text(
-                        text = "Voice Recordings",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.DarkGray,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
+                    // Add collapsible header with state
+                    var isVoiceRecordingsSectionExpanded by remember { mutableStateOf(false) }
                     
-                    // Display voice recordings
-                    voiceRecordings.forEach { recording ->
-                        VoiceRecordingItem(
-                            recording = recording,
-                            onDelete = {
-                                voiceRecordings = voiceRecordings.filter { it.id != recording.id }
-                            }
+                    // Header row with toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isVoiceRecordingsSectionExpanded = !isVoiceRecordingsSectionExpanded }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Voice Recordings",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.DarkGray
                         )
+                        
+                        // Arrow icon that rotates based on expanded state
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = if (isVoiceRecordingsSectionExpanded) 
+                                "Collapse" else "Expand",
+                            modifier = Modifier.rotate(
+                                if (isVoiceRecordingsSectionExpanded) 0f else 180f
+                            ),
+                            tint = Color.Gray
+                        )
+                    }
+                    
+                    // Collapsible content
+                    AnimatedVisibility(
+                        visible = isVoiceRecordingsSectionExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column {
+                            // Display voice recordings
+                            voiceRecordings.forEach { recording ->
+                                VoiceRecordingItem(
+                                    recording = recording,
+                                    onDelete = {
+                                        voiceRecordings = voiceRecordings.filter { it.id != recording.id }
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
