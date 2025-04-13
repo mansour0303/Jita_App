@@ -100,6 +100,18 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.AssistChip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import java.io.OutputStreamWriter
+import android.content.ContentValues
+import android.graphics.pdf.PdfDocument
+import android.os.ParcelFileDescriptor
+import android.provider.MediaStore
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.widget.Toast
+import java.io.FileOutputStream
 
 // Add this sealed class for handling image URIs safely
 sealed class ImageUriState {
@@ -316,6 +328,9 @@ fun NoteEditorScreen(
     var showTaskSelectionDialog by remember { mutableStateOf(false) }
     var filterDate by remember { mutableStateOf<Calendar?>(null) }
 
+    // State for the dropdown menu
+    var showMoreOptions by remember { mutableStateOf(false) }
+
     // Function to regenerate text with all applied styles
     val regenerateStyledText = remember { { text: String ->
         buildAnnotatedString {
@@ -511,6 +526,103 @@ fun NoteEditorScreen(
                         selection = TextRange(0) // Reset selection to start
                     )
                 }
+            }
+        }
+    }
+
+    // Create launchers for file saving
+    val saveTxtLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        uri?.let { 
+            val content = textFieldValue.text
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    OutputStreamWriter(outputStream).use { writer ->
+                        writer.write(content)
+                    }
+                }
+                Toast.makeText(context, "Note saved as TXT", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                android.util.Log.e("NoteEditor", "Error saving TXT file: ${e.message}")
+                Toast.makeText(context, "Failed to save as TXT: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    val savePdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
+            val content = textFieldValue.text
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    val pdfDocument = PdfDocument()
+                    val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create() // A4 size
+                    val page = pdfDocument.startPage(pageInfo)
+                    
+                    val canvas: Canvas = page.canvas
+                    val paint = Paint()
+                    paint.textSize = 12f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    
+                    // Draw title
+                    val titlePaint = Paint().apply {
+                        textSize = 16f
+                        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    }
+                    canvas.drawText(
+                        title.ifBlank { "Untitled" }, 
+                        40f, 
+                        50f, 
+                        titlePaint
+                    )
+                    
+                    // Draw content with line wrapping
+                    val lineHeight = 15f
+                    val maxWidth = pageInfo.pageWidth - 80
+                    var y = 80f
+                    var line = ""
+                    var lineWidth = 0f
+                    
+                    // Split text into words
+                    val words = content.split(" ")
+                    
+                    for (word in words) {
+                        val wordWidth = paint.measureText("$word ")
+                        
+                        if (lineWidth + wordWidth > maxWidth) {
+                            // Draw current line
+                            canvas.drawText(line, 40f, y, paint)
+                            y += lineHeight
+                            line = "$word "
+                            lineWidth = wordWidth
+                        } else {
+                            // Add word to current line
+                            line += "$word "
+                            lineWidth += wordWidth
+                        }
+                        
+                        // If we're near the bottom of the page, start a new page
+                        if (y > pageInfo.pageHeight - 40) {
+                            // For simplicity, we'll stop at page end
+                            break
+                        }
+                    }
+                    
+                    // Draw the last line
+                    if (line.isNotEmpty()) {
+                        canvas.drawText(line, 40f, y, paint)
+                    }
+                    
+                    pdfDocument.finishPage(page)
+                    pdfDocument.writeTo(outputStream)
+                    pdfDocument.close()
+                }
+                Toast.makeText(context, "Note saved as PDF", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                android.util.Log.e("NoteEditor", "Error saving PDF file: ${e.message}")
+                Toast.makeText(context, "Failed to save as PDF: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -994,6 +1106,18 @@ fun NoteEditorScreen(
         }
     }
 
+    // Function to save the note as a TXT file
+    fun saveAsTxt() {
+        val filename = "${title.ifBlank { "Untitled" }}.txt"
+        saveTxtLauncher.launch(filename)
+    }
+    
+    // Function to save the note as a PDF file
+    fun saveAsPdf() {
+        val filename = "${title.ifBlank { "Untitled" }}.pdf"
+        savePdfLauncher.launch(filename)
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = noteBackgroundColor,
@@ -1023,11 +1147,45 @@ fun NoteEditorScreen(
                 actions = {
 
                     // More options menu
-                    IconButton(onClick = { /* Show more options */ }) {
+                    IconButton(onClick = { showMoreOptions = true }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "More Options",
                             tint = Color.Black
+                        )
+                    }
+                    
+                    // Dropdown menu
+                    DropdownMenu(
+                        expanded = showMoreOptions,
+                        onDismissRequest = { showMoreOptions = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Save as TXT") },
+                            leadingIcon = { 
+                                Icon(
+                                    imageVector = Icons.Default.TextSnippet,
+                                    contentDescription = null
+                                )
+                            },
+                            onClick = {
+                                saveAsTxt()
+                                showMoreOptions = false
+                            }
+                        )
+                        
+                        DropdownMenuItem(
+                            text = { Text("Save as PDF") },
+                            leadingIcon = { 
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = null
+                                )
+                            },
+                            onClick = {
+                                saveAsPdf()
+                                showMoreOptions = false
+                            }
                         )
                     }
                 },
