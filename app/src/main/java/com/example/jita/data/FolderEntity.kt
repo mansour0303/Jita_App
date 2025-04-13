@@ -20,5 +20,6 @@ data class FolderEntity(
     val id: Int = 0,
     val name: String,
     val parentId: Int? = null,  // null for root folders
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val color: String? = null
 ) 

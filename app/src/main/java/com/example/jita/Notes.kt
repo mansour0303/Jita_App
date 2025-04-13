@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -46,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +64,10 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.toArgb
 
 // Data class to represent the note UI model
 data class Note(
@@ -79,14 +85,15 @@ data class Folder(
     val id: Int = 0,
     val name: String,
     val parentId: Int? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val color: String? = null
 )
 
 // Mapper functions
 fun NoteEntity.toNote(): Note = Note(id, title, content, folderId, createdAt, updatedAt, color)
 fun Note.toNoteEntity(): NoteEntity = NoteEntity(id, title, content, folderId, createdAt, updatedAt, color)
-fun FolderEntity.toFolder(): Folder = Folder(id, name, parentId, createdAt)
-fun Folder.toFolderEntity(): FolderEntity = FolderEntity(id, name, parentId, createdAt)
+fun FolderEntity.toFolder(): Folder = Folder(id, name, parentId, createdAt, color)
+fun Folder.toFolderEntity(): FolderEntity = FolderEntity(id, name, parentId, createdAt, color)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -302,6 +309,20 @@ fun NotesScreen(
 
         // Add Folder Dialog
         if (showAddFolderDialog) {
+            // Remember selected color for new folder
+            var selectedColor by rememberSaveable { mutableStateOf<String?>(null) }
+            
+            // Define a list of predefined colors (same as in EditFolderDialog)
+            val predefinedColors = listOf(
+                "#2196F3", // Blue
+                "#F44336", // Red
+                "#4CAF50", // Green
+                "#FFEB3B", // Yellow
+                "#9C27B0", // Purple
+                "#00BCD4", // Cyan
+                "#9E9E9E"  // Gray
+            )
+            
             AlertDialog(
                 onDismissRequest = {
                     showAddFolderDialog = false
@@ -309,13 +330,51 @@ fun NotesScreen(
                 },
                 title = { Text("New Folder") },
                 text = {
-                    OutlinedTextField(
-                        value = newFolderName,
-                        onValueChange = { newFolderName = it },
-                        label = { Text("Folder Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column {
+                        OutlinedTextField(
+                            value = newFolderName,
+                            onValueChange = { newFolderName = it },
+                            label = { Text("Folder Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Text("Folder Color", style = MaterialTheme.typography.bodyMedium)
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Color selection row
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Default color option (null)
+                            item {
+                                ColorOption(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    isSelected = selectedColor == null,
+                                    onClick = { selectedColor = null }
+                                )
+                            }
+                            
+                            // Predefined color options
+                            items(predefinedColors) { colorString ->
+                                val color = try {
+                                    Color(android.graphics.Color.parseColor(colorString))
+                                } catch (e: Exception) {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                                
+                                ColorOption(
+                                    color = color,
+                                    isSelected = selectedColor == colorString,
+                                    onClick = { selectedColor = colorString }
+                                )
+                            }
+                        }
+                    }
                 },
                 confirmButton = {
                     TextButton(
@@ -326,7 +385,8 @@ fun NotesScreen(
                                     // No need to create a "Main" folder
                                     val folder = FolderEntity(
                                         name = newFolderName,
-                                        parentId = currentFolderId
+                                        parentId = currentFolderId,
+                                        color = selectedColor
                                     )
                                     folderDao.insertFolder(folder)
                                     showAddFolderDialog = false
@@ -353,6 +413,22 @@ fun NotesScreen(
 
         // Edit Folder Dialog
         if (showEditFolderDialog && folderToEdit != null) {
+            // Remember the selected color
+            var selectedColor by rememberSaveable(folderToEdit) { 
+                mutableStateOf(folderToEdit!!.color)
+            }
+            
+            // Define a list of predefined colors
+            val predefinedColors = listOf(
+                "#2196F3", // Blue
+                "#F44336", // Red
+                "#4CAF50", // Green
+                "#FFEB3B", // Yellow
+                "#9C27B0", // Purple
+                "#00BCD4", // Cyan
+                "#9E9E9E"  // Gray
+            )
+            
             AlertDialog(
                 onDismissRequest = {
                     showEditFolderDialog = false
@@ -361,20 +437,61 @@ fun NotesScreen(
                 },
                 title = { Text("Edit Folder") },
                 text = {
-                    OutlinedTextField(
-                        value = editedFolderName,
-                        onValueChange = { editedFolderName = it },
-                        label = { Text("Folder Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column {
+                        OutlinedTextField(
+                            value = editedFolderName,
+                            onValueChange = { editedFolderName = it },
+                            label = { Text("Folder Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Text("Folder Color", style = MaterialTheme.typography.bodyMedium)
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Color selection row
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Default color option (null)
+                            item {
+                                ColorOption(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    isSelected = selectedColor == null,
+                                    onClick = { selectedColor = null }
+                                )
+                            }
+                            
+                            // Predefined color options
+                            items(predefinedColors) { colorString ->
+                                val color = try {
+                                    Color(android.graphics.Color.parseColor(colorString))
+                                } catch (e: Exception) {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                                
+                                ColorOption(
+                                    color = color,
+                                    isSelected = selectedColor == colorString,
+                                    onClick = { selectedColor = colorString }
+                                )
+                            }
+                        }
+                    }
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             if (editedFolderName.isNotBlank()) {
                                 scope.launch {
-                                    val updatedFolder = folderToEdit!!.copy(name = editedFolderName)
+                                    val updatedFolder = folderToEdit!!.copy(
+                                        name = editedFolderName,
+                                        color = selectedColor
+                                    )
                                     folderDao.updateFolder(updatedFolder)
                                     
                                     // Update currentFolderName if we're editing the current folder
@@ -659,12 +776,33 @@ fun NotesScreen(
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = if (isFolder) Icons.Default.Folder else Icons.Default.Note,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
+                                    if (isFolder) {
+                                        val folder = (result.second as FolderEntity).toFolder()
+                                        // Parse the color string to Color if not null
+                                        val folderColor = if (folder.color != null) {
+                                            try {
+                                                Color(android.graphics.Color.parseColor(folder.color))
+                                            } catch (e: Exception) {
+                                                MaterialTheme.colorScheme.primary
+                                            }
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        }
+                                        
+                                        Icon(
+                                            imageVector = Icons.Default.Folder,
+                                            contentDescription = null,
+                                            tint = folderColor,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Note,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
                                     
                                     Spacer(modifier = Modifier.width(12.dp))
                                     
@@ -737,6 +875,17 @@ fun FolderItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    // Parse the color string to Color if not null
+    val folderColor = if (folder.color != null) {
+        try {
+            Color(android.graphics.Color.parseColor(folder.color))
+        } catch (e: Exception) {
+            MaterialTheme.colorScheme.primary
+        }
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -752,7 +901,7 @@ fun FolderItem(
             Icon(
                 imageVector = Icons.Default.Folder,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                tint = folderColor
             )
             Text(
                 text = folder.name,
@@ -847,4 +996,25 @@ fun NoteItem(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
 fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+@Composable
+fun ColorOption(
+    color: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .padding(4.dp)
+            .clip(CircleShape)
+            .background(color)
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) Color.Black else Color.Gray,
+                shape = CircleShape
+            )
+            .clickable(onClick = onClick)
+    )
 }
