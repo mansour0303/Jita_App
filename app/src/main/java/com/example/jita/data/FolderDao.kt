@@ -27,4 +27,7 @@ interface FolderDao {
 
     @Query("SELECT * FROM folders WHERE parentId = :parentId ORDER BY name ASC")
     fun getSubFolders(parentId: Int): Flow<List<FolderEntity>>
+
+    @Query("SELECT * FROM folders WHERE name LIKE :query ORDER BY name ASC")
+    fun searchFolders(query: String): Flow<List<FolderEntity>>
 } 

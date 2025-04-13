@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Note
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -100,6 +102,11 @@ fun NotesScreen(
     var currentFolderName by rememberSaveable { mutableStateOf("Notes") }
     var folderPath by rememberSaveable { mutableStateOf<List<Pair<Int?, String>>>(emptyList()) }
 
+    // Search state
+    var showSearchDialog by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<Pair<Boolean, Any>>>(emptyList()) }
+    
     // Get folders and notes from database
     val folders = if (currentFolderId == null) {
         folderDao.getRootFolders().collectAsState(initial = emptyList<FolderEntity>()).value
@@ -180,6 +187,14 @@ fun NotesScreen(
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 actions = {
+                    // Search icon
+                    IconButton(onClick = { showSearchDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                     IconButton(onClick = { showAddFolderDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Folder,
@@ -572,6 +587,144 @@ fun NotesScreen(
                         Text("Edit")
                     }
                 }
+            )
+        }
+
+        // Search Dialog
+        if (showSearchDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showSearchDialog = false
+                    searchQuery = ""
+                    searchResults = emptyList()
+                },
+                title = { Text("Search") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { 
+                                searchQuery = it
+                                // Perform search when query changes
+                                if (it.length >= 2) {
+                                    scope.launch {
+                                        val folderResults = folderDao.searchFolders("%$it%").first()
+                                        val noteResults = noteDao.searchNotes("%$it%").first()
+                                        
+                                        searchResults = folderResults.map { folder -> Pair(true, folder) } + 
+                                                       noteResults.map { note -> Pair(false, note) }
+                                    }
+                                } else {
+                                    searchResults = emptyList()
+                                }
+                            },
+                            label = { Text("Search for notes and folders") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Show search results
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp)
+                        ) {
+                            items(searchResults) { result ->
+                                val isFolder = result.first
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            if (isFolder) {
+                                                val folder = (result.second as FolderEntity).toFolder()
+                                                // Navigate to the folder
+                                                folderPath = listOf(null to "Notes")
+                                                currentFolderId = folder.id
+                                                currentFolderName = folder.name
+                                                showSearchDialog = false
+                                                searchQuery = ""
+                                                searchResults = emptyList()
+                                            } else {
+                                                val note = (result.second as NoteEntity).toNote()
+                                                // Navigate to edit note
+                                                showSearchDialog = false
+                                                searchQuery = ""
+                                                searchResults = emptyList()
+                                                navController.navigate(AppDestinations.createNoteEditorRoute(note.id))
+                                            }
+                                        }
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFolder) Icons.Default.Folder else Icons.Default.Note,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    
+                                    if (isFolder) {
+                                        val folder = (result.second as FolderEntity).toFolder()
+                                        Text(
+                                            text = folder.name,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    } else {
+                                        val note = (result.second as NoteEntity).toNote()
+                                        Column {
+                                            Text(
+                                                text = note.title,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = note.content,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                if (searchResults.indexOf(result) < searchResults.size - 1) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                            }
+                            
+                            if (searchResults.isEmpty() && searchQuery.length >= 2) {
+                                item {
+                                    Text(
+                                        text = "No results found",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        textAlign = TextAlign.Center,
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showSearchDialog = false
+                            searchQuery = ""
+                            searchResults = emptyList()
+                        }
+                    ) {
+                        Text("Close")
+                    }
+                },
+                dismissButton = null
             )
         }
     }
