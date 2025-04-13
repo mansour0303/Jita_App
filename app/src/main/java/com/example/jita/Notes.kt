@@ -44,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,7 +68,8 @@ data class Note(
     val content: String,
     val folderId: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val color: String? = null
 )
 
 // Data class to represent the folder UI model
@@ -79,8 +81,8 @@ data class Folder(
 )
 
 // Mapper functions
-fun NoteEntity.toNote(): Note = Note(id, title, content, folderId, createdAt, updatedAt)
-fun Note.toNoteEntity(): NoteEntity = NoteEntity(id, title, content, folderId, createdAt, updatedAt)
+fun NoteEntity.toNote(): Note = Note(id, title, content, folderId, createdAt, updatedAt, color)
+fun Note.toNoteEntity(): NoteEntity = NoteEntity(id, title, content, folderId, createdAt, updatedAt, color)
 fun FolderEntity.toFolder(): Folder = Folder(id, name, parentId, createdAt)
 fun Folder.toFolderEntity(): FolderEntity = FolderEntity(id, name, parentId, createdAt)
 
@@ -626,11 +628,21 @@ fun FolderItem(
 
 @Composable
 fun NoteItem(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
+    // Parse the note color or use default white
+    val backgroundColor = remember(note.color) {
+        try {
+            note.color?.let { Color(android.graphics.Color.parseColor(it)) } ?: Color.White
+        } catch (e: Exception) {
+            Color.White
+        }
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor)
     ) {
         Row(
             modifier = Modifier

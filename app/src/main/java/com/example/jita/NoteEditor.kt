@@ -93,6 +93,9 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 
 // Add this sealed class for handling image URIs safely
 sealed class ImageUriState {
@@ -279,6 +282,10 @@ fun NoteEditorScreen(
     var textColor by remember { mutableStateOf(Color.Black) }
     var highlightColor by remember { mutableStateOf(Color.Transparent) }
     var currentFontName by remember { mutableStateOf<String?>(null) }
+    
+    // Note background color state
+    var noteBackgroundColor by remember { mutableStateOf(Color.White) }
+    var showNoteBackgroundColorPicker by remember { mutableStateOf(false) }
 
     // Track if we've created a default folder
     var defaultFolderId by remember { mutableStateOf<Int?>(null) }
@@ -410,6 +417,15 @@ fun NoteEditorScreen(
                     noteTimestamp = it.updatedAt
                     // Store the note's folder ID 
                     noteFolderId = it.folderId
+                    
+                    // Load note background color if it exists
+                    try {
+                        it.color?.let { colorHex ->
+                            noteBackgroundColor = Color(android.graphics.Color.parseColor(colorHex))
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteEditor", "Error loading note color: ${e.message}")
+                    }
                     
                     // Load checkbox items if they exist with safer parsing
                     try {
@@ -581,7 +597,8 @@ fun NoteEditorScreen(
                             checkboxItems = checkboxItemsJson,
                             voiceRecordings = voiceRecordingsJson,
                             fileAttachments = fileAttachmentsJson,
-                            imageAttachments = imageAttachmentsJson
+                            imageAttachments = imageAttachmentsJson,
+                            color = String.format("#%08X", noteBackgroundColor.toArgb())
                         )
                     } else {
                         NoteEntity(
@@ -594,7 +611,8 @@ fun NoteEditorScreen(
                             checkboxItems = checkboxItemsJson,
                             voiceRecordings = voiceRecordingsJson,
                             fileAttachments = fileAttachmentsJson,
-                            imageAttachments = imageAttachmentsJson
+                            imageAttachments = imageAttachmentsJson,
+                            color = String.format("#%08X", noteBackgroundColor.toArgb())
                         )
                     }
                     
@@ -1081,11 +1099,11 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // Formatting/palette button
-                    IconButton(onClick = { /* Formatting options */ }) {
+                    // Note background color button
+                    IconButton(onClick = { showNoteBackgroundColorPicker = !showNoteBackgroundColorPicker }) {
                         Icon(
-                            imageVector = Icons.Default.Palette,
-                            contentDescription = "Formatting Options",
+                            imageVector = Icons.Default.ColorLens,
+                            contentDescription = "Note Background Color",
                             tint = Color.DarkGray
                         )
                     }
@@ -1108,7 +1126,7 @@ fun NoteEditorScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
-                .background(Color.White)
+                .background(noteBackgroundColor)
         ) {
             // Date and time display with edit icon
             Row(
@@ -1641,6 +1659,103 @@ fun NoteEditorScreen(
     LaunchedEffect(Unit) {
         if (noteId <= 0) {
             titleFocusRequester.requestFocus()
+        }
+    }
+
+    // Show note background color picker dialog if requested
+    if (showNoteBackgroundColorPicker) {
+        Dialog(onDismissRequest = { showNoteBackgroundColorPicker = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "Select Note Background Color",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    // Color grid
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Add white/default option
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(Color.White, RoundedCornerShape(8.dp))
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color.LightGray,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        width = if (noteBackgroundColor == Color.White) 2.dp else 0.dp,
+                                        color = if (noteBackgroundColor == Color.White) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        noteBackgroundColor = Color.White
+                                        showNoteBackgroundColorPicker = false
+                                    }
+                            )
+                        }
+                        
+                        // Add pastel color options
+                        val pastelColors = listOf(
+                            Color(0xFFFFF9C4), // Light yellow
+                            Color(0xFFFFCCBC), // Light orange
+                            Color(0xFFBBDEFB), // Light blue
+                            Color(0xFFDCEDC8), // Light green
+                            Color(0xFFF8BBD0), // Light pink
+                            Color(0xFFE1BEE7), // Light purple
+                            Color(0xFFE0F7FA), // Light cyan
+                            Color(0xFFF5F5F5), // Light grey
+                            Color(0xFFFFE0B2), // Light amber
+                            Color(0xFFD7CCC8), // Light brown
+                            Color(0xFFCFD8DC)  // Light blue grey
+                        )
+                        
+                        items(pastelColors.size) { index ->
+                            val color = pastelColors[index]
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(color, RoundedCornerShape(8.dp))
+                                    .border(
+                                        width = if (noteBackgroundColor.toArgb() == color.toArgb()) 2.dp else 0.dp,
+                                        color = if (noteBackgroundColor.toArgb() == color.toArgb()) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        noteBackgroundColor = color
+                                        showNoteBackgroundColorPicker = false
+                                    }
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Cancel button
+                    Button(
+                        onClick = { showNoteBackgroundColorPicker = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
         }
     }
 }
