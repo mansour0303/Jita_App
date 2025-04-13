@@ -320,7 +320,15 @@ fun NotesScreen(
                 "#FFEB3B", // Yellow
                 "#9C27B0", // Purple
                 "#00BCD4", // Cyan
-                "#9E9E9E"  // Gray
+                "#9E9E9E", // Gray
+                "#FF9800", // Orange
+                "#795548", // Brown
+                "#607D8B", // Blue Gray
+                "#FF5722", // Deep Orange
+                "#3F51B5", // Indigo
+                "#009688", // Teal
+                "#CDDC39", // Lime
+                "#FFC107"  // Amber
             )
             
             AlertDialog(
@@ -426,7 +434,15 @@ fun NotesScreen(
                 "#FFEB3B", // Yellow
                 "#9C27B0", // Purple
                 "#00BCD4", // Cyan
-                "#9E9E9E"  // Gray
+                "#9E9E9E", // Gray
+                "#FF9800", // Orange
+                "#795548", // Brown
+                "#607D8B", // Blue Gray
+                "#FF5722", // Deep Orange
+                "#3F51B5", // Indigo
+                "#009688", // Teal
+                "#CDDC39", // Lime
+                "#FFC107"  // Amber
             )
             
             AlertDialog(
