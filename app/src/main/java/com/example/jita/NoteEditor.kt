@@ -96,6 +96,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 
 // Add this sealed class for handling image URIs safely
 sealed class ImageUriState {
@@ -1684,9 +1685,10 @@ fun NoteEditorScreen(
                     
                     // Color grid
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(4),
+                        columns = GridCells.Fixed(5),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.height(300.dp)
                     ) {
                         // Add white/default option
                         item {
@@ -1711,8 +1713,19 @@ fun NoteEditorScreen(
                             )
                         }
                         
+                        // Pastel Colors Header
+                        item(span = { GridItemSpan(5) }) {
+                            Text(
+                                text = "Pastel Colors",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                            )
+                        }
+                        
                         // Add pastel color options
                         val pastelColors = listOf(
+                            // Pastel Colors
                             Color(0xFFFFF9C4), // Light yellow
                             Color(0xFFFFCCBC), // Light orange
                             Color(0xFFBBDEFB), // Light blue
@@ -1723,11 +1736,125 @@ fun NoteEditorScreen(
                             Color(0xFFF5F5F5), // Light grey
                             Color(0xFFFFE0B2), // Light amber
                             Color(0xFFD7CCC8), // Light brown
-                            Color(0xFFCFD8DC)  // Light blue grey
+                            Color(0xFFCFD8DC),  // Light blue grey
+                            Color(0xFFFCE4EC), // Lighter pink
+                            Color(0xFFF3E5F5), // Lighter purple
+                            Color(0xFFE8EAF6), // Indigo light
+                            Color(0xFFE1F5FE), // Lighter blue
+                            Color(0xFFE0F2F1), // Teal light
+                            Color(0xFFF1F8E9), // Lighter green
+                            Color(0xFFFFFDE7), // Lighter yellow
+                            Color(0xFFFFF3E0), // Lighter orange
+                            Color(0xFFEFEBE9) // Lighter brown
                         )
                         
                         items(pastelColors.size) { index ->
                             val color = pastelColors[index]
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(color, RoundedCornerShape(8.dp))
+                                    .border(
+                                        width = if (noteBackgroundColor.toArgb() == color.toArgb()) 2.dp else 0.dp,
+                                        color = if (noteBackgroundColor.toArgb() == color.toArgb()) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        noteBackgroundColor = color
+                                        showNoteBackgroundColorPicker = false
+                                    }
+                            )
+                        }
+                        
+                        // Vibrant Colors Header
+                        item(span = { GridItemSpan(5) }) {
+                            Text(
+                                text = "Vibrant Colors",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                            )
+                        }
+                        
+                        // Add vibrant color options
+                        val vibrantColors = listOf(
+                            // More vibrant colors
+                            Color(0xFFFFEB3B), // Yellow
+                            Color(0xFFFF9800), // Orange
+                            Color(0xFF2196F3), // Blue
+                            Color(0xFF4CAF50), // Green
+                            Color(0xFFE91E63), // Pink
+                            Color(0xFF9C27B0), // Purple
+                            Color(0xFF00BCD4), // Cyan
+                            Color(0xFF607D8B), // Blue Grey
+                            Color(0xFFFF5722), // Deep Orange
+                            Color(0xFF795548), // Brown
+                            Color(0xFF9E9E9E), // Grey
+                            Color(0xFFFF4081), // Pink accent
+                            Color(0xFF536DFE), // Indigo accent
+                            Color(0xFF03A9F4), // Light Blue
+                            Color(0xFF009688), // Teal
+                            Color(0xFF8BC34A), // Light Green
+                            Color(0xFFFFC107), // Amber
+                            Color(0xFF673AB7), // Deep Purple
+                            Color(0xFF3F51B5), // Indigo
+                            Color(0xFFCDDC39)  // Lime
+                        )
+                        
+                        items(vibrantColors.size) { index ->
+                            val color = vibrantColors[index]
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(color, RoundedCornerShape(8.dp))
+                                    .border(
+                                        width = if (noteBackgroundColor.toArgb() == color.toArgb()) 2.dp else 0.dp,
+                                        color = if (noteBackgroundColor.toArgb() == color.toArgb()) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        noteBackgroundColor = color
+                                        showNoteBackgroundColorPicker = false
+                                    }
+                            )
+                        }
+                        
+                        // Dark and Muted Colors Header
+                        item(span = { GridItemSpan(5) }) {
+                            Text(
+                                text = "Dark & Muted Colors",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                            )
+                        }
+                        
+                        // Add dark and muted color options
+                        val darkMutedColors = listOf(
+                            Color(0xFFEFEBE9), // Beige
+                            Color(0xFFD7CCC8), // Taupe
+                            Color(0xFF90A4AE), // Blue Grey 300
+                            Color(0xFFBDBDBD), // Grey 400
+                            Color(0xFFB0BEC5), // Blue Grey 200
+                            Color(0xFF78909C), // Blue Grey 400
+                            Color(0xFF546E7A), // Blue Grey 600
+                            Color(0xFF455A64), // Blue Grey 700
+                            Color(0xFF37474F), // Blue Grey 800
+                            Color(0xFF212121), // Grey 900
+                            Color(0xFF283593), // Indigo 800
+                            Color(0xFF1A237E), // Indigo 900
+                            Color(0xFF0D47A1), // Blue 900
+                            Color(0xFF004D40), // Teal 900
+                            Color(0xFF1B5E20), // Green 900
+                            Color(0xFF880E4F), // Pink 900
+                            Color(0xFF311B92), // Deep Purple 900
+                            Color(0xFF263238), // Blue Grey 900
+                            Color(0xFF3E2723), // Brown 900
+                            Color(0xFF4A148C)  // Purple 900
+                        )
+                        
+                        items(darkMutedColors.size) { index ->
+                            val color = darkMutedColors[index]
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
@@ -2205,7 +2332,25 @@ private fun TextFormattingToolbar(
                     Color(0xFFBBDEFB), // Light blue
                     Color(0xFFDCEDC8), // Light green
                     Color(0xFFF8BBD0), // Light pink
-                    Color(0xFFE1BEE7)  // Light purple
+                    Color(0xFFE1BEE7),  // Light purple
+                    Color(0xFFE0F7FA), // Light cyan
+                    Color(0xFFF5F5F5), // Light grey
+                    Color(0xFFFFE0B2), // Light amber
+                    Color(0xFFD7CCC8), // Light brown
+                    Color(0xFFCFD8DC),  // Light blue grey
+                    Color(0xFFFCE4EC), // Lighter pink
+                    Color(0xFFF3E5F5), // Lighter purple
+                    Color(0xFFE8EAF6), // Indigo light
+                    Color(0xFFE1F5FE), // Lighter blue
+                    Color(0xFFE0F2F1), // Teal light
+                    Color(0xFFF1F8E9), // Lighter green
+                    Color(0xFFFFFDE7), // Lighter yellow
+                    Color(0xFFFFF3E0), // Lighter orange
+                    Color(0xFFEFEBE9), // Lighter brown
+                    Color(0xFFFAFAFA), // Almost white
+                    Color(0xFFF0F4C3), // Lime light
+                    Color(0xFFD1C4E9), // Deep purple light
+                    Color(0xFFB3E5FC)  // Darker blue
                 ).forEach { color ->
                     Box(
                         modifier = Modifier
