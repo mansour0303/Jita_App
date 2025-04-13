@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.example.jita.data.NoteDao
 import com.example.jita.data.NoteEntity
-import com.example.jita.data.FolderEntity
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -57,13 +56,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.toArgb
 import org.json.JSONArray
 import org.json.JSONObject
-import androidx.compose.ui.res.fontResource
-import com.example.jita.R
-// Audio recording imports
 import android.Manifest
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
@@ -86,17 +81,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.core.content.FileProvider
 import android.content.Intent
-import android.net.Uri
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBars
 
 // Add this sealed class for handling image URIs safely
 sealed class ImageUriState {
@@ -987,21 +981,31 @@ fun NoteEditorScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = noteBackgroundColor,
         topBar = {
             TopAppBar(
                 title = { },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // Save note when back arrow is clicked
-                        saveNoteAndNavigate(navigateUp = true)
+                        // Save note before navigating back
+                        scope.launch {
+                            saveNoteAndNavigate(navigateUp = true)
+                            navController.popBackStack()
+                        }
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.Black
+                            contentDescription = "Back"
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = noteBackgroundColor,
+                    titleContentColor = contentColorFor(noteBackgroundColor),
+                    navigationIconContentColor = contentColorFor(noteBackgroundColor),
+                    actionIconContentColor = contentColorFor(noteBackgroundColor)
+                ),
                 actions = {
 
                     // More options menu
@@ -1013,21 +1017,21 @@ fun NoteEditorScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
-                    navigationIconContentColor = Color.Black,
-                    actionIconContentColor = Color.Black
-                )
             )
         },
         bottomBar = {
-            BottomAppBar(
-                containerColor = Color.White,
-                contentColor = Color.Black,
-                tonalElevation = 0.dp
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.navigationBars),
+                color = noteBackgroundColor,
+                shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1109,25 +1113,17 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // List options button
-                    IconButton(onClick = { /* List options */ }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
-                            contentDescription = "List Options",
-                            tint = Color.DarkGray
-                        )
-                    }
+
+
                 }
             }
         },
-        containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
-                .background(noteBackgroundColor)
         ) {
             // Date and time display with edit icon
             Row(
@@ -1206,7 +1202,8 @@ fun NoteEditorScreen(
                     onFontSizeChanged = { applyFontSize(it) },
                     onTextColorChanged = { applyTextColor(it) },
                     onHighlightColorChanged = { applyHighlight(it) },
-                    onFontChanged = { applyFont(it) }
+                    onFontChanged = { applyFont(it) },
+                    backgroundColor = noteBackgroundColor
                 )
             }
 
@@ -1666,9 +1663,13 @@ fun NoteEditorScreen(
     // Show note background color picker dialog if requested
     if (showNoteBackgroundColorPicker) {
         Dialog(onDismissRequest = { showNoteBackgroundColorPicker = false }) {
+            // Use a slightly lighter version of the background color for the dialog
+            val dialogBackgroundColor = Color.White.copy(alpha = 0.95f)
+            
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = Color.White
+                color = dialogBackgroundColor,
+                shadowElevation = 8.dp
             ) {
                 Column(
                     modifier = Modifier
@@ -1900,9 +1901,18 @@ private fun TextFormattingToolbar(
     onFontSizeChanged: (Int) -> Unit,
     onTextColorChanged: (Color) -> Unit,
     onHighlightColorChanged: (Color) -> Unit,
-    onFontChanged: (String) -> Unit
+    onFontChanged: (String) -> Unit,
+    backgroundColor: Color = Color.White
 ) {
     val scrollState = rememberScrollState()
+
+    // Use a slightly darker version of the background color for the toolbar
+    val toolbarBackgroundColor = backgroundColor.copy(
+        red = (backgroundColor.red * 0.95f).coerceIn(0f, 1f),
+        green = (backgroundColor.green * 0.95f).coerceIn(0f, 1f),
+        blue = (backgroundColor.blue * 0.95f).coerceIn(0f, 1f),
+        alpha = 1f
+    )
 
     val colorOptions = listOf(
         Color.Black, Color.Red, Color.Blue, Color.Green,
@@ -1927,7 +1937,7 @@ private fun TextFormattingToolbar(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
-                .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                .background(toolbarBackgroundColor, RoundedCornerShape(8.dp))
                 .horizontalScroll(scrollState)
                 .padding(horizontal = 8.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -2201,7 +2211,7 @@ private fun TextFormattingToolbar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .background(Color.White, RoundedCornerShape(8.dp))
+                    .background(backgroundColor, RoundedCornerShape(8.dp))
                     .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
                     .padding(8.dp)
             ) {
