@@ -988,10 +988,10 @@ fun NoteEditorScreen(
                 title = { },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // Save note before navigating back
+                        // Save note before navigating back, but avoid double navigation
                         scope.launch {
                             saveNoteAndNavigate(navigateUp = true)
-                            navController.popBackStack()
+                            // Removed navController.popBackStack() to avoid double navigation
                         }
                     }) {
                         Icon(
