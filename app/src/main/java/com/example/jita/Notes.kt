@@ -545,7 +545,7 @@ fun NotesScreen(
                         Text(
                             "Last updated: ${formatDate(selectedNote!!.updatedAt)}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = Color.Black
                         )
                     }
                 },
@@ -663,18 +663,20 @@ fun NoteItem(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
                 Text(
                     text = note.title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
                 )
                 Text(
                     text = note.content,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    color = Color.Black
                 )
                 Text(
                     text = formatDate(note.updatedAt),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = Color.Black
                 )
             }
             IconButton(onClick = onDelete) {
