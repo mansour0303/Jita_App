@@ -562,13 +562,15 @@ fun NoteEditorScreen(
                     val page = pdfDocument.startPage(pageInfo)
                     
                     val canvas: Canvas = page.canvas
-                    val paint = Paint()
-                    paint.textSize = 12f
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    val defaultPaint = Paint().apply {
+                        textSize = 12f
+                        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                        color = Color.Black.toArgb()
+                    }
                     
                     // Draw title
                     val titlePaint = Paint().apply {
-                        textSize = 16f
+                        textSize = 18f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     }
                     canvas.drawText(
@@ -578,41 +580,243 @@ fun NoteEditorScreen(
                         titlePaint
                     )
                     
-                    // Draw content with line wrapping
-                    val lineHeight = 15f
+                    // Draw content with line wrapping and styles
+                    val lineHeight = 18f
                     val maxWidth = pageInfo.pageWidth - 80
                     var y = 80f
-                    var line = ""
-                    var lineWidth = 0f
                     
-                    // Split text into words
-                    val words = content.split(" ")
-                    
-                    for (word in words) {
-                        val wordWidth = paint.measureText("$word ")
+                    // No styles case - revert to old implementation for plain text
+                    if (appliedStyles.isEmpty()) {
+                        var line = ""
+                        var lineWidth = 0f
                         
-                        if (lineWidth + wordWidth > maxWidth) {
-                            // Draw current line
-                            canvas.drawText(line, 40f, y, paint)
-                            y += lineHeight
-                            line = "$word "
-                            lineWidth = wordWidth
-                        } else {
-                            // Add word to current line
-                            line += "$word "
-                            lineWidth += wordWidth
+                        // Split text into lines first to preserve paragraph structure
+                        val paragraphs = content.split("\n")
+                        
+                        for (paragraph in paragraphs) {
+                            // If it's an empty paragraph (double newline), add extra space
+                            if (paragraph.isEmpty()) {
+                                y += lineHeight
+                                continue
+                            }
+                            
+                            // Split paragraph into words
+                            val words = paragraph.split(" ")
+                            
+                            // Reset line for new paragraph
+                            line = ""
+                            lineWidth = 0f
+                            
+                            for (word in words) {
+                                val wordWidth = defaultPaint.measureText("$word ")
+                                
+                                if (lineWidth + wordWidth > maxWidth) {
+                                    // Draw current line
+                                    canvas.drawText(line, 40f, y, defaultPaint)
+                                    y += lineHeight
+                                    line = "$word "
+                                    lineWidth = wordWidth
+                                } else {
+                                    // Add word to current line
+                                    line += "$word "
+                                    lineWidth += wordWidth
+                                }
+                                
+                                // If we're near the bottom of the page, start a new page
+                                if (y > pageInfo.pageHeight - 40) {
+                                    // For simplicity, we'll stop at page end
+                                    break
+                                }
+                            }
+                            
+                            // Draw the last line of the paragraph
+                            if (line.isNotEmpty()) {
+                                canvas.drawText(line, 40f, y, defaultPaint)
+                                y += lineHeight // Move to next line after paragraph
+                            }
+                            
+                            // If we're near the bottom of the page, stop
+                            if (y > pageInfo.pageHeight - 40) {
+                                break
+                            }
+                        }
+                    } 
+                    // Apply styles
+                    else {
+                        // Sort styles by start position to process them in order
+                        val sortedStyles = appliedStyles.sortedBy { it.start }
+                        
+                        // Process text considering both styles and newlines
+                        val text = content
+                        
+                        // Find all newline positions
+                        val newlinePositions = mutableListOf<Int>()
+                        var nlIndex = text.indexOf('\n')
+                        while (nlIndex != -1) {
+                            newlinePositions.add(nlIndex)
+                            nlIndex = text.indexOf('\n', nlIndex + 1)
                         }
                         
-                        // If we're near the bottom of the page, start a new page
-                        if (y > pageInfo.pageHeight - 40) {
-                            // For simplicity, we'll stop at page end
-                            break
+                        // Maintain current position in text
+                        var currentPosition = 0
+                        var line = ""
+                        var lineWidth = 0f
+                        
+                        while (currentPosition < text.length) {
+                            // Check if current position is a newline
+                            if (text.getOrNull(currentPosition) == '\n') {
+                                // Draw current line if any
+                                if (line.isNotEmpty()) {
+                                    canvas.drawText(line, 40f, y, defaultPaint)
+                                }
+                                
+                                // Move to next line
+                                y += lineHeight
+                                line = ""
+                                lineWidth = 0f
+                                currentPosition++
+                                
+                                // Check if we've reached page end
+                                if (y > pageInfo.pageHeight - 40) {
+                                    break
+                                }
+                                
+                                continue
+                            }
+                            
+                            // Find style that applies to current position
+                            val applicableStyle = sortedStyles.firstOrNull { 
+                                it.start <= currentPosition && it.end > currentPosition 
+                            }
+                            
+                            // Create appropriate paint based on style
+                            val paint = Paint(defaultPaint)
+                            
+                            if (applicableStyle != null) {
+                                // Apply bold
+                                if (applicableStyle.isBold) {
+                                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                                }
+                                
+                                // Apply underline
+                                if (applicableStyle.isUnderlined) {
+                                    paint.flags = paint.flags or Paint.UNDERLINE_TEXT_FLAG
+                                }
+                                
+                                // Apply strikethrough
+                                if (applicableStyle.isStrikethrough) {
+                                    paint.flags = paint.flags or Paint.STRIKE_THRU_TEXT_FLAG
+                                }
+                                
+                                // Apply font size
+                                if (applicableStyle.fontSize != null) {
+                                    paint.textSize = applicableStyle.fontSize.toFloat()
+                                }
+                                
+                                // Apply text color
+                                if (applicableStyle.textColor != null) {
+                                    try {
+                                        paint.color = android.graphics.Color.parseColor(applicableStyle.textColor)
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("NoteEditor", "Error parsing color: ${e.message}")
+                                    }
+                                }
+                                
+                                // Determine the end of this styled segment, considering newlines
+                                val nextNewlinePos = newlinePositions.firstOrNull { it > currentPosition }
+                                val endOfStyle = minOf(
+                                    applicableStyle.end, 
+                                    text.length,
+                                    nextNewlinePos ?: Int.MAX_VALUE
+                                )
+                                
+                                // Process each character in this styled segment
+                                var i = currentPosition
+                                while (i < endOfStyle) {
+                                    // Find the next word or space
+                                    val nextSpaceIndex = text.indexOf(' ', i).let {
+                                        if (it == -1 || it > endOfStyle) endOfStyle else it + 1
+                                    }
+                                    
+                                    val word = text.substring(i, nextSpaceIndex)
+                                    val wordWidth = paint.measureText(word)
+                                    
+                                    if (lineWidth + wordWidth > maxWidth) {
+                                        // Draw current line and start a new one
+                                        if (line.isNotEmpty()) {
+                                            canvas.drawText(line, 40f, y, defaultPaint)
+                                        }
+                                        y += lineHeight
+                                        line = ""
+                                        lineWidth = 0f
+                                        
+                                        // Check if we're at page end
+                                        if (y > pageInfo.pageHeight - 40) {
+                                            break
+                                        }
+                                    }
+                                    
+                                    // Draw this word with its style
+                                    canvas.drawText(word, 40f + lineWidth, y, paint)
+                                    lineWidth += wordWidth
+                                    
+                                    i = nextSpaceIndex
+                                }
+                                
+                                // Update current position
+                                currentPosition = endOfStyle
+                            } else {
+                                // No style applies, find next style start or end of text or newline
+                                val nextStyleStart = sortedStyles
+                                    .firstOrNull { it.start > currentPosition }?.start ?: text.length
+                                val nextNewlinePos = newlinePositions.firstOrNull { it > currentPosition }
+                                val endPosition = minOf(
+                                    nextStyleStart,
+                                    nextNewlinePos ?: Int.MAX_VALUE
+                                )
+                                
+                                // Process unstyled text
+                                var i = currentPosition
+                                while (i < endPosition) {
+                                    // Find the next word or space
+                                    val nextSpaceIndex = text.indexOf(' ', i).let {
+                                        if (it == -1 || it > endPosition) endPosition else it + 1
+                                    }
+                                    
+                                    val word = text.substring(i, nextSpaceIndex)
+                                    val wordWidth = defaultPaint.measureText(word)
+                                    
+                                    if (lineWidth + wordWidth > maxWidth) {
+                                        // Draw current line and start a new one
+                                        if (line.isNotEmpty()) {
+                                            canvas.drawText(line, 40f, y, defaultPaint)
+                                        }
+                                        y += lineHeight
+                                        line = ""
+                                        lineWidth = 0f
+                                        
+                                        // Check if we're at page end
+                                        if (y > pageInfo.pageHeight - 40) {
+                                            break
+                                        }
+                                    }
+                                    
+                                    // Draw this word with default style
+                                    canvas.drawText(word, 40f + lineWidth, y, defaultPaint)
+                                    lineWidth += wordWidth
+                                    
+                                    i = nextSpaceIndex
+                                }
+                                
+                                // Update current position
+                                currentPosition = endPosition
+                            }
+                            
+                            // Check if we've reached page end
+                            if (y > pageInfo.pageHeight - 40) {
+                                break
+                            }
                         }
-                    }
-                    
-                    // Draw the last line
-                    if (line.isNotEmpty()) {
-                        canvas.drawText(line, 40f, y, paint)
                     }
                     
                     pdfDocument.finishPage(page)
