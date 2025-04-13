@@ -30,4 +30,10 @@ interface FolderDao {
 
     @Query("SELECT * FROM folders WHERE name LIKE :query ORDER BY name ASC")
     fun searchFolders(query: String): Flow<List<FolderEntity>>
+
+    @Query("SELECT * FROM folders ORDER BY id ASC")
+    fun getAllFolders(): Flow<List<FolderEntity>>
+
+    @Query("DELETE FROM folders")
+    suspend fun deleteAllFolders()
 } 

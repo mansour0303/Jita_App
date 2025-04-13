@@ -45,6 +45,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE title LIKE :query OR content LIKE :query ORDER BY updatedAt DESC")
     fun searchNotes(query: String): Flow<List<NoteEntity>>
     
+    @Query("DELETE FROM notes")
+    suspend fun deleteAllNotes()
+    
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFolder(folder: FolderEntity): Long
     

@@ -1,6 +1,6 @@
 package com.example.jita
 import android.Manifest
-import android.app.Activity // <<< Add this import
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -44,7 +44,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll // Add this import
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -125,12 +125,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.navigation.NavType
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.GifDecoder
@@ -143,12 +143,13 @@ import com.example.jita.ui.theme.JitaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
-import android.widget.Toast // Add Toast import
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
@@ -168,6 +169,10 @@ import java.io.FileInputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import java.util.zip.ZipFile
+import com.example.jita.data.NoteDao
+import com.example.jita.data.FolderDao
+import com.example.jita.data.NoteEntity
+import com.example.jita.data.FolderEntity
 
 
 object AppDestinations {
@@ -431,7 +436,9 @@ class MainActivity : ComponentActivity() {
                         BackupScreen(
                             navController = navController,
                             listNameEntities = listNameEntities,
-                            tasks = tasks
+                            tasks = tasks,
+                            noteDao = noteDao,  // Add parameter for noteDao
+                            folderDao = folderDao  // Add parameter for folderDao
                         )
                     }
                     // Add composable for the Restore screen
@@ -439,7 +446,9 @@ class MainActivity : ComponentActivity() {
                         RestoreScreen(
                             navController = navController,
                             listNameDao = listNameDao,
-                            taskDao = taskDao
+                            taskDao = taskDao,
+                            noteDao = noteDao,  // Add parameter for noteDao
+                            folderDao = folderDao  // Add parameter for folderDao
                         )
                     }
                     composable(AppDestinations.NOTES_SCREEN) {
@@ -4302,12 +4311,76 @@ fun parseTimeToMillis(timeString: String): Long {
 fun BackupScreen(
     navController: NavHostController,
     listNameEntities: List<ListNameEntity>,
-    tasks: List<Task>
+    tasks: List<Task>,
+    noteDao: NoteDao,  // Add parameter for noteDao
+    folderDao: FolderDao  // Add parameter for folderDao
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var isExporting by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var showExportDialog by remember { mutableStateOf(false) }
+    
+    // Add state for notes and folders
+    val notes = noteDao.getAllNotes().collectAsState(initial = emptyList()).value
+    val folders = folderDao.getAllFolders().collectAsState(initial = emptyList()).value
+    
+    // Helper function to copy all note attachments
+    fun copyNoteAttachments(sourceDir: File, destDir: File, filesCopied: MutableSet<String>): Int {
+        var count = 0
+        if (sourceDir.exists() && sourceDir.isDirectory) {
+            // Copy files from attachments directory
+            val attachmentsDir = File(sourceDir, "attachments")
+            if (attachmentsDir.exists() && attachmentsDir.isDirectory) {
+                attachmentsDir.listFiles()?.forEach { sourceFile ->
+                    val destFile = File(destDir, sourceFile.name)
+                    sourceFile.copyTo(destFile, overwrite = true)
+                    filesCopied.add(sourceFile.name)
+                    count++
+                }
+            }
+            
+            // Copy image attachments
+            val imagesDir = File(sourceDir, "images")
+            if (imagesDir.exists() && imagesDir.isDirectory) {
+                imagesDir.listFiles()?.forEach { sourceFile ->
+                    val destFile = File(destDir, sourceFile.name)
+                    sourceFile.copyTo(destFile, overwrite = true)
+                    filesCopied.add(sourceFile.name)
+                    count++
+                }
+            }
+        }
+        return count
+    }
+    
+    // Helper function to extract and copy voice recordings from notes
+    fun copyVoiceRecordings(notes: List<NoteEntity>, destDir: File, filesCopied: MutableSet<String>): Int {
+        var count = 0
+        notes.forEach { note ->
+            try {
+                note.voiceRecordings?.let { recordingsJson ->
+                    val recordingsArray = JSONArray(recordingsJson)
+                    for (i in 0 until recordingsArray.length()) {
+                        val recordingObj = recordingsArray.getJSONObject(i)
+                        val filePath = recordingObj.optString("filePath", "")
+                        if (filePath.isNotEmpty()) {
+                            val sourceFile = File(filePath)
+                            if (sourceFile.exists()) {
+                                val destFile = File(destDir, sourceFile.name)
+                                sourceFile.copyTo(destFile, overwrite = true)
+                                filesCopied.add(sourceFile.name)
+                                count++
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BackupScreen", "Error copying voice recording: ${e.message}")
+            }
+        }
+        return count
+    }
     
     // Create launcher for document creation - changed to .zip extension
     val createDocumentLauncher = rememberLauncherForActivityResult(
@@ -4338,100 +4411,142 @@ fun BackupScreen(
                         put("description", task.description)
                         put("dueDate", task.dueDate.timeInMillis)
                         put("priority", task.priority.name)
-                        put("list", task.list ?: JSONObject.NULL)
+                        put("list", task.list)
                         put("trackedTimeMillis", task.trackedTimeMillis)
-                        put("isTracking", task.isTracking)
-                        put("trackingStartTime", task.trackingStartTime)
                         put("completed", task.completed)
                         
-                        // Store actual file paths in the JSON
-                        val imagePathsArray = JSONArray()
-                        task.imagePaths.forEach { path ->
-                            imagePathsArray.put(path.substringAfterLast('/'))
-                        }
-                        put("imagePaths", imagePathsArray)
-                        
-                        val filePathsArray = JSONArray()
-                        task.filePaths.forEach { path ->
-                            filePathsArray.put(path.substringAfterLast('/'))
-                        }
-                        put("filePaths", filePathsArray)
+                        // Add image and file paths as arrays
+                        put("imagePaths", JSONArray().apply {
+                            task.imagePaths.forEach { put(it) }
+                        })
+                        put("filePaths", JSONArray().apply {
+                            task.filePaths.forEach { put(it) }
+                        })
                     })
                 }
                 put("tasks", tasksArray)
+                
+                // Add folders
+                val foldersArray = JSONArray()
+                folders.forEach { folder ->
+                    foldersArray.put(JSONObject().apply {
+                        put("id", folder.id)
+                        put("name", folder.name)
+                        put("parentId", folder.parentId)
+                        put("createdAt", folder.createdAt)
+                        put("color", folder.color)
+                    })
+                }
+                put("folders", foldersArray)
+                
+                // Add notes
+                val notesArray = JSONArray()
+                notes.forEach { note ->
+                    notesArray.put(JSONObject().apply {
+                        put("id", note.id)
+                        put("title", note.title)
+                        put("content", note.content)
+                        put("folderId", note.folderId)
+                        put("createdAt", note.createdAt)
+                        put("updatedAt", note.updatedAt)
+                        put("color", note.color)
+                        put("isArchived", note.isArchived)
+                        put("isPinned", note.isPinned)
+                        put("isDeleted", note.isDeleted)
+                        put("styles", note.styles)
+                        put("checkboxItems", note.checkboxItems)
+                        put("voiceRecordings", note.voiceRecordings)
+                        put("fileAttachments", note.fileAttachments)
+                        put("imageAttachments", note.imageAttachments)
+                    })
+                }
+                put("notes", notesArray)
             }
             
-            try {
-                // Create a temporary directory to store files for zipping
-                val tempDir = File(context.cacheDir, "backup_temp")
-                if (tempDir.exists()) {
-                    tempDir.deleteRecursively()
-                }
-                tempDir.mkdirs()
-                
-                // Save JSON data to a file
-                val jsonFile = File(tempDir, "data.json")
-                FileOutputStream(jsonFile).use { outputStream ->
-                    outputStream.write(backupData.toString(2).toByteArray())
-                }
-                
-                // Copy all attachment files
-                val filesDir = File(tempDir, "files")
-                filesDir.mkdirs()
-                
-                val filesCopied = mutableSetOf<String>()
-                
-                // Copy all task attachments
-                tasks.forEach { task ->
-                    // Copy image files
-                    task.imagePaths.forEach { imagePath ->
-                        val sourceFile = File(imagePath)
-                        if (sourceFile.exists()) {
-                            val destFile = File(filesDir, sourceFile.name)
-                            sourceFile.copyTo(destFile, overwrite = true)
-                            filesCopied.add(sourceFile.name)
+            scope.launch(Dispatchers.IO) {
+                try {
+                    // Create a temporary directory to store files for zipping
+                    val tempDir = File(context.cacheDir, "backup_temp")
+                    if (tempDir.exists()) {
+                        tempDir.deleteRecursively()
+                    }
+                    tempDir.mkdirs()
+                    
+                    // Save JSON data to a file
+                    val jsonFile = File(tempDir, "data.json")
+                    FileOutputStream(jsonFile).use { outputStream ->
+                        outputStream.write(backupData.toString(2).toByteArray())
+                    }
+                    
+                    // Copy all attachment files
+                    val filesDir = File(tempDir, "files")
+                    filesDir.mkdirs()
+                    
+                    val filesCopied = mutableSetOf<String>()
+                    
+                    // Copy all task attachments
+                    tasks.forEach { task ->
+                        // Copy image files
+                        task.imagePaths.forEach { imagePath ->
+                            val sourceFile = File(imagePath)
+                            if (sourceFile.exists()) {
+                                val destFile = File(filesDir, sourceFile.name)
+                                sourceFile.copyTo(destFile, overwrite = true)
+                                filesCopied.add(sourceFile.name)
+                            }
+                        }
+                        
+                        // Copy other files
+                        task.filePaths.forEach { filePath ->
+                            val sourceFile = File(filePath)
+                            if (sourceFile.exists()) {
+                                val destFile = File(filesDir, sourceFile.name)
+                                sourceFile.copyTo(destFile, overwrite = true)
+                                filesCopied.add(sourceFile.name)
+                            }
                         }
                     }
                     
-                    // Copy other files
-                    task.filePaths.forEach { filePath ->
-                        val sourceFile = File(filePath)
-                        if (sourceFile.exists()) {
-                            val destFile = File(filesDir, sourceFile.name)
-                            sourceFile.copyTo(destFile, overwrite = true)
-                            filesCopied.add(sourceFile.name)
+                    // Copy all note attachments
+                    val noteAttachmentsDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_notes")
+                    val noteAttachmentsCount = copyNoteAttachments(noteAttachmentsDir, filesDir, filesCopied)
+                    
+                    // Copy note voice recordings
+                    val voiceRecordingsCount = copyVoiceRecordings(notes, filesDir, filesCopied)
+                    
+                    // Create ZIP file
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        ZipOutputStream(outputStream.buffered()).use { zipOut ->
+                            // Add JSON file to ZIP
+                            addFileToZip(zipOut, jsonFile, "data.json")
+                            
+                            // Add all files in the files directory
+                            val filesInDir = filesDir.listFiles()
+                            filesInDir?.forEach { file ->
+                                addFileToZip(zipOut, file, "files/${file.name}")
+                            }
                         }
                     }
+                    
+                    // Clean up temp directory
+                    tempDir.deleteRecursively()
+                    
+                    // Summary counts
+                    val noteCount = notes.size
+                    val folderCount = folders.size
+                    
+                    exportMessage = "Backup successfully saved with ${tasks.size} tasks, $noteCount notes, $folderCount folders, and ${filesCopied.size} attachments!"
+                } catch (e: Exception) {
+                    Log.e("BackupScreen", "Error exporting data", e)
+                    exportMessage = "Error: ${e.localizedMessage}"
+                } finally {
+                    isExporting = false
+                    showExportDialog = true
                 }
-                
-                // Create ZIP file
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    ZipOutputStream(outputStream.buffered()).use { zipOut ->
-                        // Add JSON file to ZIP
-                        addFileToZip(zipOut, jsonFile, "data.json")
-                        
-                        // Add all files in the files directory
-                        val filesInDir = filesDir.listFiles()
-                        filesInDir?.forEach { file ->
-                            addFileToZip(zipOut, file, "files/${file.name}")
-                        }
-                    }
-                }
-                
-                // Clean up temp directory
-                tempDir.deleteRecursively()
-                
-                exportMessage = "Backup successfully saved with ${filesCopied.size} attachments!"
-            } catch (e: Exception) {
-                Log.e("BackupScreen", "Error exporting data", e)
-                exportMessage = "Error: ${e.localizedMessage}"
-            } finally {
-                isExporting = false
-                showExportDialog = true
             }
         }
     }
-
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -4466,23 +4581,23 @@ fun BackupScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Add space between app bar and description text
+            // Remove the header text and add some space instead
             Spacer(modifier = Modifier.height(16.dp))
             
             // Description
             Text(
-                text = "Create a backup of all your lists, tasks and attachments. The backup will be saved as a ZIP file that you can use to restore your data later.",
+                text = "Create a backup of your lists, tasks, notes, folders, and all associated files. This backup can be restored later if needed.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Stats
+            // Data summary card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
                 )
             ) {
                 Column(
@@ -4497,7 +4612,7 @@ fun BackupScreen(
                         fontWeight = FontWeight.Bold
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -4528,6 +4643,32 @@ fun BackupScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text("Completed")
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Add note and folder counts
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${notes.size}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Notes")
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${folders.size}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Folders")
                         }
                     }
                 }
@@ -4611,7 +4752,9 @@ private fun addFileToZip(zipOut: ZipOutputStream, file: File, entryPath: String)
 fun RestoreScreen(
     navController: NavHostController,
     listNameDao: ListNameDao,
-    taskDao: TaskDao
+    taskDao: TaskDao,
+    noteDao: NoteDao,  // Add parameter for noteDao
+    folderDao: FolderDao  // Add parameter for folderDao
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -4619,8 +4762,48 @@ fun RestoreScreen(
     var isImporting by remember { mutableStateOf(false) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
-    // Updated to store lists, tasks, completed tasks, and attachments
-    var importStats by remember { mutableStateOf(Tuple4(0, 0, 0, 0)) }
+    // Updated to store lists, tasks, completed tasks, attachments, notes, and folders
+    data class ImportStats(
+        val lists: Int = 0,
+        val tasks: Int = 0,
+        val completedTasks: Int = 0,
+        val attachments: Int = 0,
+        val notes: Int = 0,
+        val folders: Int = 0
+    )
+    var importStats by remember { mutableStateOf(ImportStats()) }
+    
+    // Helper function to update attachment paths in JSON
+    fun updateAttachmentPaths(attachmentsJson: String?, restoredFiles: Map<String, String>): String? {
+        if (attachmentsJson.isNullOrEmpty()) return attachmentsJson
+        
+        try {
+            val attachmentsArray = JSONArray(attachmentsJson)
+            val updatedArray = JSONArray()
+            
+            for (i in 0 until attachmentsArray.length()) {
+                val attachmentObj = attachmentsArray.getJSONObject(i)
+                val updatedObj = JSONObject(attachmentObj.toString())
+                
+                // Update file path if it exists in restored files
+                if (updatedObj.has("filePath")) {
+                    val originalPath = updatedObj.getString("filePath")
+                    val fileName = originalPath.substringAfterLast('/')
+                    val newPath = restoredFiles[fileName]
+                    if (newPath != null) {
+                        updatedObj.put("filePath", newPath)
+                    }
+                }
+                
+                updatedArray.put(updatedObj)
+            }
+            
+            return updatedArray.toString()
+        } catch (e: Exception) {
+            Log.e("RestoreScreen", "Error updating attachment paths: ${e.message}")
+            return attachmentsJson
+        }
+    }
     
     // Create launcher for document selection - updated to support ZIP files
     val openDocumentLauncher = rememberLauncherForActivityResult(
@@ -4630,159 +4813,265 @@ fun RestoreScreen(
             isImporting = true
             importMessage = null
             
-            try {
-                // Create temporary directory to extract files
-                val tempDir = File(context.cacheDir, "restore_temp")
-                if (tempDir.exists()) {
-                    tempDir.deleteRecursively()
-                }
-                tempDir.mkdirs()
-                
-                // Create a directory for extracted files
-                val extractedFilesDir = File(tempDir, "files")
-                extractedFilesDir.mkdirs()
-                
-                // Create a temp file for the zip
-                val zipFile = File(tempDir, "backup.zip")
-                
-                // Copy the ZIP file to temporary location
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(zipFile).use { output ->
-                        input.copyTo(output)
+            scope.launch(Dispatchers.IO) {
+                try {
+                    // Create temporary directory to extract files
+                    val tempDir = File(context.cacheDir, "restore_temp")
+                    if (tempDir.exists()) {
+                        tempDir.deleteRecursively()
                     }
-                }
-                
-                // Extract the ZIP contents
-                extractZipFile(zipFile, tempDir)
-                
-                // Read the extracted JSON file
-                val jsonFile = File(tempDir, "data.json")
-                if (!jsonFile.exists()) {
-                    throw Exception("Invalid backup file: Missing data.json")
-                }
-                
-                val jsonString = jsonFile.readText()
-                val jsonObject = JSONObject(jsonString)
-                
-                // Prepare target directory for restored files
-                val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_files")
-                if (!targetDir.exists()) {
-                    targetDir.mkdirs()
-                }
-                
-                // Move extracted files to app's storage
-                val extractedFiles = File(tempDir, "files").listFiles() ?: emptyArray()
-                val restoredFiles = mutableMapOf<String, String>() // filename -> full path
-                
-                extractedFiles.forEach { sourceFile ->
-                    val targetFile = File(targetDir, sourceFile.name)
-                    sourceFile.copyTo(targetFile, overwrite = true)
-                    restoredFiles[sourceFile.name] = targetFile.absolutePath
-                }
-                
-                // Parse lists
-                val listsArray = jsonObject.getJSONArray("lists")
-                val listEntities = mutableListOf<ListNameEntity>()
-                for (i in 0 until listsArray.length()) {
-                    val listObj = listsArray.getJSONObject(i)
-                    listEntities.add(
-                        ListNameEntity(
-                            id = if (listObj.has("id")) listObj.getInt("id") else 0,
-                            name = listObj.getString("name")
+                    tempDir.mkdirs()
+                    
+                    // Create a directory for extracted files
+                    val extractedFilesDir = File(tempDir, "files")
+                    extractedFilesDir.mkdirs()
+                    
+                    // Create a temp file for the zip
+                    val zipFile = File(tempDir, "backup.zip")
+                    
+                    // Copy the ZIP file to temporary location
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(zipFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    
+                    // Extract the ZIP contents
+                    extractZipFile(zipFile, tempDir)
+                    
+                    // Read the extracted JSON file
+                    val jsonFile = File(tempDir, "data.json")
+                    if (!jsonFile.exists()) {
+                        throw Exception("Invalid backup file: Missing data.json")
+                    }
+                    
+                    val jsonString = jsonFile.readText()
+                    val jsonObject = JSONObject(jsonString)
+                    
+                    // Prepare target directory for restored files
+                    val targetDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_files")
+                    if (!targetDir.exists()) {
+                        targetDir.mkdirs()
+                    }
+                    
+                    // Prepare target directory for notes attachments
+                    val noteAttachmentsDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "jita_notes")
+                    if (!noteAttachmentsDir.exists()) {
+                        noteAttachmentsDir.mkdirs()
+                    }
+                    
+                    // Create subdirectories for various note attachments
+                    val noteAttachmentsSubdirs = File(noteAttachmentsDir, "attachments")
+                    if (!noteAttachmentsSubdirs.exists()) {
+                        noteAttachmentsSubdirs.mkdirs()
+                    }
+                    
+                    val noteImagesSubdir = File(noteAttachmentsDir, "images")
+                    if (!noteImagesSubdir.exists()) {
+                        noteImagesSubdir.mkdirs()
+                    }
+                    
+                    // Move extracted files to app's storage
+                    val extractedFiles = File(tempDir, "files").listFiles() ?: emptyArray()
+                    val restoredFiles = mutableMapOf<String, String>() // filename -> full path
+                    
+                    extractedFiles.forEach { sourceFile ->
+                        // Determine if this is a voice recording or attachment based on filename pattern
+                        val targetFile = when {
+                            sourceFile.name.startsWith("voice_recording_") -> {
+                                // Voice recording - place in noteAttachmentsDir
+                                File(noteAttachmentsDir, sourceFile.name)
+                            }
+                            else -> {
+                                // General attachment - place in regular files directory
+                                File(targetDir, sourceFile.name)
+                            }
+                        }
+                        
+                        sourceFile.copyTo(targetFile, overwrite = true)
+                        restoredFiles[sourceFile.name] = targetFile.absolutePath
+                    }
+                    
+                    // Parse lists
+                    val listsArray = jsonObject.optJSONArray("lists") ?: JSONArray()
+                    val listEntities = mutableListOf<ListNameEntity>()
+                    for (i in 0 until listsArray.length()) {
+                        val listObj = listsArray.getJSONObject(i)
+                        listEntities.add(
+                            ListNameEntity(
+                                id = if (listObj.has("id")) listObj.getInt("id") else 0,
+                                name = listObj.getString("name")
+                            )
                         )
-                    )
-                }
-                
-                // Parse tasks
-                val tasksArray = jsonObject.getJSONArray("tasks")
-                val taskEntities = mutableListOf<TaskEntity>()
-                var completedTaskCount = 0
-                
-                for (i in 0 until tasksArray.length()) {
-                    val taskObj = tasksArray.getJSONObject(i)
-                    val list = if (taskObj.has("list") && !taskObj.isNull("list")) 
-                        taskObj.getString("list") else null
-                    
-                    val isCompleted = if (taskObj.has("completed")) 
-                        taskObj.getBoolean("completed") else false
-                    
-                    // Get filename lists
-                    val imageFileNames = if (taskObj.has("imagePaths"))
-                        taskObj.getJSONArray("imagePaths").toList().map { it.toString() } else emptyList()
-                    
-                    val fileFileNames = if (taskObj.has("filePaths"))
-                        taskObj.getJSONArray("filePaths").toList().map { it.toString() } else emptyList()
-                    
-                    // Convert filenames to full paths
-                    val imagePaths = imageFileNames.mapNotNull { filename -> 
-                        restoredFiles[filename]
                     }
                     
-                    val filePaths = fileFileNames.mapNotNull { filename -> 
-                        restoredFiles[filename]
-                    }
+                    // Parse tasks
+                    val tasksArray = jsonObject.optJSONArray("tasks") ?: JSONArray()
+                    val taskEntities = mutableListOf<TaskEntity>()
+                    var completedTaskCount = 0
                     
-                    if (isCompleted) completedTaskCount++
-                    
-                    taskEntities.add(
-                        TaskEntity(
-                            id = if (taskObj.has("id")) taskObj.getInt("id") else 0,
-                            name = taskObj.getString("name"),
-                            description = taskObj.getString("description"),
-                            dueDate = taskObj.getLong("dueDate"),
-                            priority = taskObj.getString("priority"),
-                            list = list,
-                            trackedTimeMillis = taskObj.getLong("trackedTimeMillis"),
-                            isTracking = taskObj.getBoolean("isTracking"),
-                            trackingStartTime = taskObj.getLong("trackingStartTime"),
-                            completed = isCompleted,
-                            imagePaths = imagePaths,
-                            filePaths = filePaths
+                    for (i in 0 until tasksArray.length()) {
+                        val taskObj = tasksArray.getJSONObject(i)
+                        val isCompleted = taskObj.optBoolean("completed", false)
+                        if (isCompleted) completedTaskCount++
+                        
+                        // Extract image paths
+                        val imagePathsArray = taskObj.optJSONArray("imagePaths") ?: JSONArray()
+                        val imagePaths = mutableListOf<String>()
+                        for (j in 0 until imagePathsArray.length()) {
+                            val originalPath = imagePathsArray.getString(j)
+                            val fileName = originalPath.substringAfterLast('/')
+                            // Use the new path if the file was restored
+                            val newPath = restoredFiles[fileName] ?: originalPath
+                            imagePaths.add(newPath)
+                        }
+                        
+                        // Extract file paths
+                        val filePathsArray = taskObj.optJSONArray("filePaths") ?: JSONArray()
+                        val filePaths = mutableListOf<String>()
+                        for (j in 0 until filePathsArray.length()) {
+                            val originalPath = filePathsArray.getString(j)
+                            val fileName = originalPath.substringAfterLast('/')
+                            // Use the new path if the file was restored
+                            val newPath = restoredFiles[fileName] ?: originalPath
+                            filePaths.add(newPath)
+                        }
+                        
+                        taskEntities.add(
+                            TaskEntity(
+                                id = if (taskObj.has("id")) taskObj.getInt("id") else 0,
+                                name = taskObj.getString("name"),
+                                description = taskObj.getString("description"),
+                                dueDate = taskObj.getLong("dueDate"),
+                                priority = taskObj.getString("priority"),
+                                list = if (taskObj.isNull("list")) null else taskObj.getString("list"),
+                                trackedTimeMillis = taskObj.optLong("trackedTimeMillis", 0),
+                                isTracking = taskObj.optBoolean("isTracking", false),
+                                trackingStartTime = taskObj.optLong("trackingStartTime", 0),
+                                completed = isCompleted,
+                                imagePaths = imagePaths,
+                                filePaths = filePaths
+                            )
                         )
-                    )
-                }
-                
-                // Clean up temp directory
-                tempDir.deleteRecursively()
-                
-                // Store import stats before database operations
-                importStats = Tuple4(
-                    listEntities.size, 
-                    taskEntities.size, 
-                    completedTaskCount,
-                    restoredFiles.size
-                )
-                
-                // Insert into database
-                scope.launch(Dispatchers.IO) {
+                    }
+                    
+                    // Parse folders
+                    val folderEntities = mutableListOf<FolderEntity>()
+                    jsonObject.optJSONArray("folders")?.let { foldersArray ->
+                        for (i in 0 until foldersArray.length()) {
+                            val folderObj = foldersArray.getJSONObject(i)
+                            folderEntities.add(
+                                FolderEntity(
+                                    id = if (folderObj.has("id")) folderObj.getInt("id") else 0,
+                                    name = folderObj.getString("name"),
+                                    parentId = if (folderObj.isNull("parentId")) null else folderObj.getInt("parentId"),
+                                    createdAt = folderObj.optLong("createdAt", System.currentTimeMillis()),
+                                    color = if (folderObj.isNull("color")) null else folderObj.getString("color")
+                                )
+                            )
+                        }
+                    }
+                    
+                    // Parse notes
+                    val noteEntities = mutableListOf<NoteEntity>()
+                    jsonObject.optJSONArray("notes")?.let { notesArray ->
+                        for (i in 0 until notesArray.length()) {
+                            val noteObj = notesArray.getJSONObject(i)
+                            
+                            // Process attachments to update paths
+                            val processedVoiceRecordings = updateAttachmentPaths(
+                                noteObj.optString("voiceRecordings"), 
+                                restoredFiles
+                            )
+                            
+                            val processedFileAttachments = updateAttachmentPaths(
+                                noteObj.optString("fileAttachments"), 
+                                restoredFiles
+                            )
+                            
+                            val processedImageAttachments = updateAttachmentPaths(
+                                noteObj.optString("imageAttachments"), 
+                                restoredFiles
+                            )
+                            
+                            noteEntities.add(
+                                NoteEntity(
+                                    id = if (noteObj.has("id")) noteObj.getInt("id") else 0,
+                                    title = noteObj.getString("title"),
+                                    content = noteObj.getString("content"),
+                                    folderId = if (noteObj.isNull("folderId")) null else noteObj.getInt("folderId"),
+                                    createdAt = noteObj.optLong("createdAt", System.currentTimeMillis()),
+                                    updatedAt = noteObj.optLong("updatedAt", System.currentTimeMillis()),
+                                    color = if (noteObj.isNull("color")) null else noteObj.getString("color"),
+                                    isArchived = noteObj.optBoolean("isArchived", false),
+                                    isPinned = noteObj.optBoolean("isPinned", false),
+                                    isDeleted = noteObj.optBoolean("isDeleted", false),
+                                    styles = if (noteObj.isNull("styles")) null else noteObj.getString("styles"),
+                                    checkboxItems = if (noteObj.isNull("checkboxItems")) null else noteObj.getString("checkboxItems"),
+                                    voiceRecordings = processedVoiceRecordings,
+                                    fileAttachments = processedFileAttachments,
+                                    imageAttachments = processedImageAttachments
+                                )
+                            )
+                        }
+                    }
+                    
                     try {
                         // Clear existing data
                         taskDao.deleteAllTasks()
                         listNameDao.deleteAllListNames()
                         
-                        // Insert new data
+                        // Only delete folders and notes if we have them in the backup
+                        if (folderEntities.isNotEmpty() || noteEntities.isNotEmpty()) {
+                            folderDao.deleteAllFolders()
+                            noteDao.deleteAllNotes()
+                        }
+                        
+                        // Insert new data (folders first, then notes)
+                        folderEntities.forEach { folderDao.insertFolder(it) }
+                        noteEntities.forEach { noteDao.insertNote(it) }
+                        
+                        // Insert list names and tasks
                         listEntities.forEach { listNameDao.insertListName(it) }
                         taskEntities.forEach { taskDao.insertTask(it) }
                         
-                        importMessage = "Data restored successfully with ${restoredFiles.size} attachments!"
+                        // Update stats
+                        val stats = ImportStats(
+                            lists = listEntities.size,
+                            tasks = taskEntities.size,
+                            completedTasks = completedTaskCount,
+                            attachments = restoredFiles.size,
+                            notes = noteEntities.size,
+                            folders = folderEntities.size
+                        )
+                        
+                        withContext(Dispatchers.Main) {
+                            importStats = stats
+                            importMessage = "Data restored successfully!"
+                            isImporting = false
+                            showImportDialog = true
+                        }
                     } catch (e: Exception) {
                         Log.e("RestoreScreen", "Database error", e)
-                        importMessage = "Database error: ${e.localizedMessage}"
-                    } finally {
+                        withContext(Dispatchers.Main) {
+                            importMessage = "Database error: ${e.localizedMessage}"
+                            isImporting = false
+                            showImportDialog = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("RestoreScreen", "Error importing data", e)
+                    importMessage = "Error: ${e.localizedMessage}"
+                } finally {
+                    withContext(Dispatchers.Main) {
                         isImporting = false
                         showImportDialog = true
                     }
                 }
-                
-            } catch (e: Exception) {
-                Log.e("RestoreScreen", "Error importing data", e)
-                importMessage = "Error: ${e.localizedMessage}"
-                isImporting = false
-                showImportDialog = true
             }
         }
     }
-
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -4822,7 +5111,7 @@ fun RestoreScreen(
             
             // Description
             Text(
-                text = "Restore your lists, tasks, and attachments from a previously created backup file. This will replace all current data with the data from the backup file.",
+                text = "Restore your lists, tasks, notes, folders, and attachments from a previously created backup file. This will replace all current data with the data from the backup file.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
@@ -4852,7 +5141,7 @@ fun RestoreScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = "Restoring data will replace all your current lists and tasks. This action cannot be undone.",
+                        text = "Restoring data will replace all your current lists, tasks, notes, and folders. This action cannot be undone.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onErrorContainer
@@ -4888,13 +5177,12 @@ fun RestoreScreen(
                 )
             }
             
-            // Add extra space between button and GIF
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             
             // GIF image
             GifImage(
-                modifier = Modifier.size(200.dp),
-                drawableResId = R.drawable.cat // Changed from crowi to cat
+                modifier = Modifier.size(160.dp),
+                drawableResId = R.drawable.rab
             )
         }
     }
@@ -4911,13 +5199,21 @@ fun RestoreScreen(
                     if (importMessage!!.startsWith("Data restored")) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Restored data summary:", fontWeight = FontWeight.Bold)
-                        Text("Lists: ${importStats.first}")
-                        Text("Tasks: ${importStats.second}")
-                        Text("Completed tasks: ${importStats.third}")
+                        Text("Lists: ${importStats.lists}")
+                        Text("Tasks: ${importStats.tasks}")
+                        Text("Completed tasks: ${importStats.completedTasks}")
+                        
+                        if (importStats.folders > 0) {
+                            Text("Folders: ${importStats.folders}")
+                        }
+                        
+                        if (importStats.notes > 0) {
+                            Text("Notes: ${importStats.notes}")
+                        }
                         
                         // Show attachments count from importStats
-                        if (importStats.fourth > 0) {
-                            Text("Attachments: ${importStats.fourth}")
+                        if (importStats.attachments > 0) {
+                            Text("Attachments: ${importStats.attachments}")
                         }
                     }
                 }
