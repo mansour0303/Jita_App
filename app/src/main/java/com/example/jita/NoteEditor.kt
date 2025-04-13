@@ -101,6 +101,9 @@ sealed class ImageUriState {
     object NotFound : ImageUriState()
 }
 
+// Define a consistent blue color for collapsible headers
+val collapsibleBlue = Color(0xFF2196F3) // Material Blue
+
 // Define data class for checkbox items
 data class CheckboxItem(
     val id: String = UUID.randomUUID().toString(),
@@ -1340,7 +1343,7 @@ fun NoteEditorScreen(
                         Text(
                             text = "Voice Recordings",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.DarkGray
+                            color = collapsibleBlue
                         )
                         
                         // Arrow icon that rotates based on expanded state
@@ -1351,7 +1354,7 @@ fun NoteEditorScreen(
                             modifier = Modifier
                                 .rotate(if (isVoiceRecordingsSectionExpanded) 0f else 180f)
                                 .size(20.dp),
-                            tint = Color.Gray
+                            tint = collapsibleBlue
                         )
                     }
                     
@@ -1406,7 +1409,7 @@ fun NoteEditorScreen(
                         Text(
                             text = "Attachments",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.DarkGray
+                            color = collapsibleBlue
                         )
                         
                         // Arrow icon that rotates based on expanded state
@@ -1417,7 +1420,7 @@ fun NoteEditorScreen(
                             modifier = Modifier
                                 .rotate(if (isAttachmentSectionExpanded) 0f else 180f)
                                 .size(20.dp),
-                            tint = Color.Gray
+                            tint = collapsibleBlue
                         )
                     }
                     
@@ -1477,7 +1480,7 @@ fun NoteEditorScreen(
                         Text(
                             text = "Images",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.DarkGray
+                            color = collapsibleBlue
                         )
                         
                         // Arrow icon that rotates based on expanded state
@@ -1488,7 +1491,7 @@ fun NoteEditorScreen(
                             modifier = Modifier
                                 .rotate(if (isImageSectionExpanded) 0f else 180f)
                                 .size(20.dp),
-                            tint = Color.Gray
+                            tint = collapsibleBlue
                         )
                     }
                     
