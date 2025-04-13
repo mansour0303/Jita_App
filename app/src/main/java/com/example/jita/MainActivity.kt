@@ -468,7 +468,8 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             noteDao = noteDao,
                             noteId = noteId,
-                            folderId = currentFolderId
+                            folderId = currentFolderId,
+                            taskDao = taskDao // Add taskDao parameter
                         )
                     }
                 }

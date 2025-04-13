@@ -91,6 +91,15 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBars
+import com.example.jita.data.TaskDao
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.AssistChip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 
 // Add this sealed class for handling image URIs safely
 sealed class ImageUriState {
@@ -232,7 +241,8 @@ fun NoteEditorScreen(
     navController: NavHostController,
     noteDao: NoteDao,
     noteId: Int = -1,
-    folderId: Int? = null
+    folderId: Int? = null,
+    taskDao: TaskDao // Add taskDao parameter for accessing tasks
 ) {
     val scope = rememberCoroutineScope()
     val titleFocusRequester = remember { FocusRequester() }
@@ -301,6 +311,10 @@ fun NoteEditorScreen(
     // Add state for voice recordings
     var voiceRecordings by remember { mutableStateOf(listOf<VoiceRecording>()) }
     var showVoiceRecordingDialog by remember { mutableStateOf(false) }
+
+    // State for task selection dialog
+    var showTaskSelectionDialog by remember { mutableStateOf(false) }
+    var filterDate by remember { mutableStateOf<Calendar?>(null) }
 
     // Function to regenerate text with all applied styles
     val regenerateStyledText = remember { { text: String ->
@@ -1095,11 +1109,11 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // Emoji button
-                    IconButton(onClick = { /* Insert emoji */ }) {
+                    // Emoji button - now opens task selector
+                    IconButton(onClick = { showTaskSelectionDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.EmojiEmotions,
-                            contentDescription = "Insert Emoji",
+                            contentDescription = "Select Task",
                             tint = Color.DarkGray
                         )
                     }
@@ -1885,6 +1899,37 @@ fun NoteEditorScreen(
                 }
             }
         }
+    }
+
+    // Show task selection dialog
+    if (showTaskSelectionDialog) {
+        TaskSelectionDialog(
+            taskDao = taskDao,
+            onDismiss = { showTaskSelectionDialog = false },
+            onTaskSelected = { task ->
+                // Get current cursor position from textFieldValue
+                val cursorPosition = textFieldValue.selection.start
+                
+                // Format task card text to insert
+                val taskCardText = buildTaskCardText(task)
+                
+                // Insert task card at cursor position
+                val textBefore = textFieldValue.text.substring(0, cursorPosition)
+                val textAfter = textFieldValue.text.substring(cursorPosition)
+                val newText = textBefore + taskCardText + textAfter
+                
+                // Update text field with new text and adjust cursor position
+                textFieldValue = TextFieldValue(
+                    text = newText,
+                    selection = TextRange(cursorPosition + taskCardText.length)
+                )
+                
+                // Close the dialog
+                showTaskSelectionDialog = false
+            },
+            filterDate = filterDate,
+            onFilterDateChanged = { filterDate = it }
+        )
     }
 }
 
@@ -3860,6 +3905,355 @@ fun ImageSlider(
                         )
                     }
                 }
+            }
+        }
+    }
+} 
+
+// Function to build a formatted task card text
+private fun buildTaskCardText(task: Task): String {
+    val prioritySymbol = when (task.priority) {
+        TaskPriority.HIGH -> "🔴"
+        TaskPriority.MEDIUM -> "🟠"
+        TaskPriority.LOW -> "🔵"
+        TaskPriority.VERY_LOW -> "⚪"
+    }
+    
+    val completionStatus = if (task.completed) "✅ Completed" else "⬜ Pending"
+    val dateFormat = SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault())
+    val dueDate = dateFormat.format(task.dueDate.time)
+    
+    return """
+        
+        TASK:
+        📌 ${task.name}
+        $prioritySymbol ${task.priority.label} Priority
+        🗓️ Due: $dueDate
+        📝 ${task.description}
+        $completionStatus
+        
+    """.trimIndent()
+}
+
+// Helper function to format tracked time
+private fun formatTrackedTime(timeMillis: Long): String {
+    val hours = timeMillis / (1000 * 60 * 60)
+    val minutes = (timeMillis % (1000 * 60 * 60)) / (1000 * 60)
+    
+    return if (hours > 0) {
+        "$hours h $minutes min"
+    } else {
+        "$minutes min"
+    }
+}
+
+// Task selection dialog
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TaskSelectionDialog(
+    taskDao: TaskDao,
+    onDismiss: () -> Unit,
+    onTaskSelected: (Task) -> Unit,
+    filterDate: Calendar?,
+    onFilterDateChanged: (Calendar?) -> Unit
+) {
+    val context = LocalContext.current
+    
+    // Get tasks from database based on filter
+    val allTasksFromDb by if (filterDate != null) {
+        // Get start and end of the selected day
+        val startOfDay = Calendar.getInstance().apply {
+            timeInMillis = filterDate.timeInMillis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        
+        val endOfDay = Calendar.getInstance().apply {
+            timeInMillis = filterDate.timeInMillis
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
+        
+        taskDao.getTasksForDate(startOfDay, endOfDay).collectAsState(initial = emptyList())
+    } else {
+        taskDao.getAllTasks().collectAsState(initial = emptyList())
+    }
+    
+    // Convert TaskEntity to Task objects
+    val tasks = remember(allTasksFromDb) {
+        allTasksFromDb.map { entity ->
+            Task(
+                id = entity.id,
+                name = entity.name,
+                description = entity.description,
+                dueDate = Calendar.getInstance().apply { timeInMillis = entity.dueDate },
+                priority = try {
+                    TaskPriority.valueOf(entity.priority)
+                } catch (e: IllegalArgumentException) {
+                    TaskPriority.MEDIUM
+                },
+                list = entity.list,
+                trackedTimeMillis = entity.trackedTimeMillis,
+                isTracking = entity.isTracking,
+                trackingStartTime = entity.trackingStartTime,
+                completed = entity.completed,
+                imagePaths = entity.imagePaths,
+                filePaths = entity.filePaths
+            )
+        }
+    }
+    
+    // Date picker state for filter
+    val datePickerState = rememberDatePickerState()
+    var showDatePicker by remember { mutableStateOf(false) }
+    
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.8f),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Select a Task",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close"
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Date filter
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Filter by Date:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Date selection chip
+                    AssistChip(
+                        onClick = { showDatePicker = true },
+                        label = { 
+                            Text(
+                                filterDate?.let { 
+                                    SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(it.time) 
+                                } ?: "Select Date"
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Select Date"
+                            )
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Clear filter button
+                    if (filterDate != null) {
+                        IconButton(onClick = { onFilterDateChanged(null) }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear Filter"
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Task list
+                if (tasks.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (filterDate != null) 
+                                "No tasks for the selected date" 
+                            else 
+                                "No tasks available",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(tasks) { task ->
+                            TaskItem(
+                                task = task,
+                                onClick = { onTaskSelected(task) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Date picker dialog
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // Get the selected date
+                        datePickerState.selectedDateMillis?.let { dateMillis ->
+                            val newDate = Calendar.getInstance().apply {
+                                timeInMillis = dateMillis
+                            }
+                            onFilterDateChanged(newDate)
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+}
+
+// Individual task item for selection
+@Composable
+fun TaskItem(
+    task: Task,
+    onClick: () -> Unit
+) {
+    val dateFormat = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Priority indicator
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .background(task.priority.color, CircleShape)
+            )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            // Task details
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = task.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    
+                    Spacer(modifier = Modifier.width(4.dp))
+                    
+                    Text(
+                        text = dateFormat.format(task.dueDate.time),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    
+                    if (task.completed) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
+                        ) {
+                            Text(
+                                text = "Completed",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Selection button
+            IconButton(onClick = onClick) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Task",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
