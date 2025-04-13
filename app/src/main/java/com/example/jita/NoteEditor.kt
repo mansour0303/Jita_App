@@ -713,6 +713,19 @@ fun NoteEditorScreen(
                                     paint.textSize = applicableStyle.fontSize.toFloat()
                                 }
                                 
+                                // Apply font family
+                                if (applicableStyle.fontName != null) {
+                                    val typeface = when (applicableStyle.fontName) {
+                                        "Times" -> Typeface.create("serif", paint.typeface?.style ?: Typeface.NORMAL)
+                                        "Segoe Print" -> Typeface.create("casual", paint.typeface?.style ?: Typeface.NORMAL)
+                                        "System Sans-serif" -> Typeface.SANS_SERIF
+                                        "System Serif" -> Typeface.SERIF
+                                        "System Monospace" -> Typeface.MONOSPACE
+                                        else -> paint.typeface  // Keep the current typeface if not recognized
+                                    }
+                                    paint.typeface = typeface
+                                }
+                                
                                 // Apply text color
                                 if (applicableStyle.textColor != null) {
                                     try {
@@ -753,6 +766,27 @@ fun NoteEditorScreen(
                                         // Check if we're at page end
                                         if (y > pageInfo.pageHeight - 40) {
                                             break
+                                        }
+                                    }
+                                    
+                                    // Apply highlight/background color if specified
+                                    if (applicableStyle.backgroundColor != null && applicableStyle.backgroundColor != "#00000000") {
+                                        try {
+                                            val bgPaint = Paint()
+                                            bgPaint.color = android.graphics.Color.parseColor(applicableStyle.backgroundColor)
+                                            
+                                            // Draw rectangle for background slightly larger than text
+                                            val textHeight = paint.fontMetrics.descent - paint.fontMetrics.ascent
+                                            val padding = 2f
+                                            canvas.drawRect(
+                                                40f + lineWidth,                 // left
+                                                y + paint.fontMetrics.ascent - padding,  // top
+                                                40f + lineWidth + wordWidth,     // right
+                                                y + paint.fontMetrics.descent + padding, // bottom
+                                                bgPaint
+                                            )
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("NoteEditor", "Error applying highlight: ${e.message}")
                                         }
                                     }
                                     
