@@ -2356,8 +2356,21 @@ private fun TextFormattingToolbar(
     )
 
     val colorOptions = listOf(
-        Color.Black, Color.Red, Color.Blue, Color.Green,
-        Color.Magenta, Color.Cyan, Color.Yellow, Color.Gray
+        Color.Black, Color.DarkGray, Color.Gray, Color.LightGray,
+        Color.Red, Color(0xFFE57373), // Light Red
+        Color.Blue, Color(0xFF64B5F6), // Light Blue
+        Color.Green, Color(0xFF81C784), // Light Green
+        Color(0xFF9C27B0), // Purple
+        Color(0xFF673AB7), // Deep Purple
+        Color(0xFF3F51B5), // Indigo
+        Color(0xFF03A9F4), // Light Blue
+        Color(0xFF009688), // Teal
+        Color(0xFF4CAF50), // Green
+        Color(0xFFCDDC39), // Lime
+        Color(0xFFFFEB3B), // Yellow
+        Color(0xFFFF9800), // Orange
+        Color(0xFF795548), // Brown
+        Color(0xFF607D8B)  // Blue Gray
     )
 
     // Font options - these should match the font files in your app/src/main/res/font directory
