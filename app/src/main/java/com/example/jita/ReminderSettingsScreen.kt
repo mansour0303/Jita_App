@@ -248,10 +248,23 @@ fun ReminderSettingsScreen(
     // Date formatter
     val dateFormatter = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
     
+    // Current date in millis for validation
+    val today = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    
     // Date picker dialog for reminder date
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate.timeInMillis
+            initialSelectedDateMillis = selectedDate.timeInMillis,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis >= today
+                }
+            }
         )
         
         DatePickerDialog(
@@ -279,7 +292,12 @@ fun ReminderSettingsScreen(
     // Date picker dialog for task selection
     if (showTaskDatePicker) {
         val taskDatePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = taskDialogDate.timeInMillis
+            initialSelectedDateMillis = taskDialogDate.timeInMillis,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis >= today
+                }
+            }
         )
         
         DatePickerDialog(
