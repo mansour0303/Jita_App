@@ -186,10 +186,15 @@ object AppDestinations {
     const val NOTE_EDITOR_SCREEN = "note_editor/{noteId}"
     const val REMINDERS_SCREEN = "reminders"
     const val REMINDER_SETTINGS_SCREEN = "reminder_settings"
+    const val REMINDER_EDITOR_SCREEN = "reminder_editor/{reminderId}"
     
     // Helper functions for parameterized navigation
     fun createNoteEditorRoute(noteId: Int = -1): String {
         return "note_editor/$noteId"
+    }
+    
+    fun createReminderEditorRoute(reminderId: Int = -1): String {
+        return "reminder_editor/$reminderId"
     }
 }
 
@@ -474,6 +479,21 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             tasks = tasks,
                             reminderDao = reminderDao  // Add this parameter
+                        )
+                    }
+                    // Add composable for editing existing reminders
+                    composable(
+                        route = AppDestinations.REMINDER_EDITOR_SCREEN,
+                        arguments = listOf(
+                            navArgument("reminderId") { type = NavType.IntType }
+                        )
+                    ) { backStackEntry ->
+                        val reminderId = backStackEntry.arguments?.getInt("reminderId") ?: -1
+                        ReminderSettingsScreen(
+                            navController = navController,
+                            tasks = tasks,
+                            reminderDao = reminderDao,
+                            reminderId = reminderId
                         )
                     }
                     composable(

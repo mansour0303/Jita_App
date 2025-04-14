@@ -49,6 +49,7 @@ import com.example.jita.data.ReminderDao
 import com.example.jita.data.ReminderEntity
 import com.example.jita.model.Reminder
 import com.example.jita.model.toEntity
+import com.example.jita.model.toReminder
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,25 +57,107 @@ import kotlinx.coroutines.launch
 fun ReminderSettingsScreen(
     navController: NavHostController,
     tasks: List<Task>,
-    reminderDao: ReminderDao
+    reminderDao: ReminderDao,
+    reminderId: Int = -1
 ) {
-    // State for the reminder settings
-    var selectedHour by remember { mutableStateOf(6) }
-    var selectedMinute by remember { mutableStateOf(0) }
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance().apply { 
-        add(Calendar.DAY_OF_YEAR, 1) // Default to tomorrow
-    }) }
-    var reminderName by remember { mutableStateOf("") }
-    var reminderMessage by remember { mutableStateOf("") }
-    var alarmSoundEnabled by remember { mutableStateOf(true) }
-    var vibrationEnabled by remember { mutableStateOf(true) }
-    
     // Coroutine scope for database operations
     val coroutineScope = rememberCoroutineScope()
     
+    // Track if screen is in edit mode
+    val isEditMode = reminderId > 0
+    
+    // State to store the existing reminder if in edit mode
+    val existingReminder = remember { mutableStateOf<Reminder?>(null) }
+    
+    // Load existing reminder if in edit mode
+    LaunchedEffect(reminderId) {
+        if (isEditMode) {
+            reminderDao.getReminderById(reminderId)?.let { entity ->
+                existingReminder.value = entity.toReminder()
+            }
+        }
+    }
+    
+    // State for the reminder settings - initialize with existing values if in edit mode
+    var selectedHour by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.time.get(Calendar.HOUR_OF_DAY)
+        else 6
+    ) }
+    
+    var selectedMinute by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.time.get(Calendar.MINUTE)
+        else 0
+    ) }
+    
+    var selectedDate by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.time
+        else Calendar.getInstance().apply { 
+            add(Calendar.DAY_OF_YEAR, 1) // Default to tomorrow
+        }
+    ) }
+    
+    var reminderName by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.name
+        else ""
+    ) }
+    
+    var reminderMessage by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.message
+        else ""
+    ) }
+    
+    var alarmSoundEnabled by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.alarmSoundEnabled
+        else true
+    ) }
+    
+    var vibrationEnabled by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.vibrationEnabled
+        else true
+    ) }
+    
     // State for selected alarm sound
-    var selectedSoundUri by remember { mutableStateOf<Uri?>(null) }
-    var selectedSoundName by remember { mutableStateOf("Default Alarm") }
+    var selectedSoundUri by remember { mutableStateOf<Uri?>(
+        if (isEditMode && existingReminder.value != null)
+            existingReminder.value!!.soundUri
+        else null
+    ) }
+    
+    var selectedSoundName by remember { mutableStateOf(
+        if (isEditMode && existingReminder.value != null && existingReminder.value!!.soundName != null)
+            existingReminder.value!!.soundName!!
+        else "Default Alarm"
+    ) }
+    
+    // State for attached tasks - initialize with existing tasks if in edit mode
+    var attachedTasks by remember { mutableStateOf<List<Task>>(
+        if (isEditMode && existingReminder.value != null)
+            tasks.filter { existingReminder.value!!.attachedTaskIds.contains(it.id) }
+        else emptyList()
+    ) }
+    
+    // Update states when existing reminder is loaded
+    LaunchedEffect(existingReminder.value) {
+        existingReminder.value?.let { reminder ->
+            selectedHour = reminder.time.get(Calendar.HOUR_OF_DAY)
+            selectedMinute = reminder.time.get(Calendar.MINUTE)
+            selectedDate = reminder.time
+            reminderName = reminder.name
+            reminderMessage = reminder.message
+            alarmSoundEnabled = reminder.alarmSoundEnabled
+            vibrationEnabled = reminder.vibrationEnabled
+            selectedSoundUri = reminder.soundUri
+            selectedSoundName = reminder.soundName ?: "Default Alarm"
+            attachedTasks = tasks.filter { reminder.attachedTaskIds.contains(it.id) }
+        }
+    }
     
     // Media player for sound preview
     val context = LocalContext.current
@@ -155,7 +238,6 @@ fun ReminderSettingsScreen(
     }
     
     // State for attached tasks
-    var attachedTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
     var showAttachTasksDialog by remember { mutableStateOf(false) }
     var taskDialogDate by remember { mutableStateOf(Calendar.getInstance()) }
 
@@ -335,7 +417,7 @@ fun ReminderSettingsScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        text = "Set Reminder",
+                        text = if (isEditMode) "Edit Reminder" else "New Reminder",
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center
                     )
@@ -777,8 +859,9 @@ fun ReminderSettingsScreen(
                 
                 Button(
                     onClick = { 
-                        // Create and save the reminder
-                        val newReminder = Reminder(
+                        // Create or update the reminder
+                        val reminderToSave = Reminder(
+                            id = if (isEditMode) reminderId else 0, // Keep existing ID if editing
                             name = reminderName.ifBlank { "Reminder" },
                             message = reminderMessage,
                             time = Calendar.getInstance().apply {
@@ -800,13 +883,13 @@ fun ReminderSettingsScreen(
                         
                         // Save to database
                         coroutineScope.launch {
-                            reminderDao.insertReminder(newReminder.toEntity())
+                            reminderDao.insertReminder(reminderToSave.toEntity())
                             navController.navigateUp()
                         }
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Save")
+                    Text(if (isEditMode) "Update" else "Save")
                 }
             }
         }

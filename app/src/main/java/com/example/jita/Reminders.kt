@@ -3,6 +3,7 @@ package com.example.jita
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -122,6 +123,10 @@ fun RemindersScreen(
                         onDeleteClick = {
                             reminderToDelete = reminder
                             showDeleteDialog = true
+                        },
+                        onEditClick = {
+                            // Navigate to edit screen with the reminder ID
+                            navController.navigate(AppDestinations.createReminderEditorRoute(reminder.id))
                         }
                     )
                 }
@@ -173,7 +178,8 @@ fun RemindersScreen(
 @Composable
 fun ReminderCard(
     reminder: Reminder,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onEditClick: () -> Unit
 ) {
     val timeFormatter = SimpleDateFormat("hh:mm a", Locale.getDefault())
     val dateFormatter = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
@@ -181,7 +187,8 @@ fun ReminderCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .clickable { onEditClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
