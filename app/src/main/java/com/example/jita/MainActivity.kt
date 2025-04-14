@@ -184,6 +184,7 @@ object AppDestinations {
     const val RESTORE_SCREEN = "restore"
     const val NOTES_SCREEN = "notes"
     const val NOTE_EDITOR_SCREEN = "note_editor/{noteId}"
+    const val REMINDERS_SCREEN = "reminders"
     
     // Helper functions for parameterized navigation
     fun createNoteEditorRoute(noteId: Int = -1): String {
@@ -456,6 +457,12 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             noteDao = noteDao,  // Add this line
                             folderDao = folderDao  // Add this line
+                        )
+                    }
+                    // Add composable for the Reminders screen
+                    composable(AppDestinations.REMINDERS_SCREEN) {
+                        RemindersScreen(
+                            navController = navController
                         )
                     }
                     composable(
@@ -950,7 +957,8 @@ fun MainScreen(
         AppDestinations.STATISTICS_SCREEN to "Statistics",
         AppDestinations.NOTES_SCREEN to "Notes", // Moved Notes above Backup
         AppDestinations.BACKUP_SCREEN to "Backup",
-        AppDestinations.RESTORE_SCREEN to "Restore"
+        AppDestinations.RESTORE_SCREEN to "Restore",
+        AppDestinations.REMINDERS_SCREEN to "Reminders"
     )
 
     // Local state for the Add Task Dialog form
