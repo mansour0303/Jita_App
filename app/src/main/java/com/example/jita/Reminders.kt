@@ -44,16 +44,221 @@ fun RemindersScreen(
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     
-    // Filter reminders based on search query
-    val filteredReminders = if (searchQuery.isBlank()) {
-        reminders.value.map { it.toReminder() }
-    } else {
-        reminders.value
-            .map { it.toReminder() }
-            .filter { reminder ->
+    // Date filter related states
+    var showDateFilterDialog by remember { mutableStateOf(false) }
+    var startDate by remember { mutableStateOf<Calendar?>(null) }
+    var endDate by remember { mutableStateOf<Calendar?>(null) }
+    var isFilterActive by remember { mutableStateOf(false) }
+    
+    // State for date picker in filter dialog
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    
+    // Date formatter
+    val dateFormatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+    
+    // Function to check if a reminder date is within the filter range
+    val isDateInRange: (Calendar) -> Boolean = { date ->
+        val isAfterStart = startDate?.let { start -> !date.before(start) } ?: true
+        val isBeforeEnd = endDate?.let { end -> !date.after(end) } ?: true
+        isAfterStart && isBeforeEnd
+    }
+    
+    // Filter reminders based on search query and date filter
+    val filteredReminders = reminders.value
+        .map { it.toReminder() }
+        .filter { reminder ->
+            // Search filter
+            val matchesSearch = if (searchQuery.isBlank()) {
+                true
+            } else {
                 reminder.name.contains(searchQuery, ignoreCase = true) ||
                 reminder.message.contains(searchQuery, ignoreCase = true)
             }
+            
+            // Date filter
+            val matchesDateFilter = if (!isFilterActive) {
+                true
+            } else {
+                isDateInRange(reminder.time)
+            }
+            
+            matchesSearch && matchesDateFilter
+        }
+    
+    // Date filter dialog
+    if (showDateFilterDialog) {
+        AlertDialog(
+            onDismissRequest = { showDateFilterDialog = false },
+            title = { Text("Filter Reminders by Date") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    // Start date selector
+                    OutlinedButton(
+                        onClick = { showStartDatePicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            Text(
+                                text = startDate?.let { dateFormatter.format(it.time) } ?: "Select Start Date"
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // End date selector
+                    OutlinedButton(
+                        onClick = { showEndDatePicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            Text(
+                                text = endDate?.let { dateFormatter.format(it.time) } ?: "Select End Date"
+                            )
+                        }
+                    }
+                    
+                    if (isFilterActive) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Clear filter button
+                        OutlinedButton(
+                            onClick = {
+                                startDate = null
+                                endDate = null
+                                isFilterActive = false
+                                showDateFilterDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Clear Filter")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Apply filter only if at least one date is selected
+                        isFilterActive = startDate != null || endDate != null
+                        showDateFilterDialog = false
+                    }
+                ) {
+                    Text("Apply Filter")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDateFilterDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Start date picker dialog
+    if (showStartDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = startDate?.timeInMillis
+        )
+        
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            startDate = Calendar.getInstance().apply {
+                                timeInMillis = millis
+                                // Set to beginning of day
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                        }
+                        showStartDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showStartDatePicker = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+    
+    // End date picker dialog
+    if (showEndDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = endDate?.timeInMillis
+        )
+        
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            endDate = Calendar.getInstance().apply {
+                                timeInMillis = millis
+                                // Set to end of day
+                                set(Calendar.HOUR_OF_DAY, 23)
+                                set(Calendar.MINUTE, 59)
+                                set(Calendar.SECOND, 59)
+                                set(Calendar.MILLISECOND, 999)
+                            }
+                        }
+                        showEndDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showEndDatePicker = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
     
     Scaffold(
@@ -114,6 +319,29 @@ fun RemindersScreen(
                         }
                     },
                     actions = {
+                        // Filter Icon
+                        IconButton(onClick = { showDateFilterDialog = true }) {
+                            Box {
+                                Icon(
+                                    imageVector = Icons.Default.FilterList,
+                                    contentDescription = "Filter Reminders"
+                                )
+                                // Show indicator dot when filter is active
+                                if (isFilterActive) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.tertiary,
+                                                shape = CircleShape
+                                            )
+                                            .align(Alignment.TopEnd)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Search Icon
                         IconButton(onClick = { isSearchActive = true }) {
                             Icon(
                                 imageVector = Icons.Default.Search,
@@ -146,7 +374,7 @@ fun RemindersScreen(
         }
     ) { paddingValues ->
         if (filteredReminders.isEmpty()) {
-            // Empty state or no search results
+            // Empty state or no search/filter results
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -158,27 +386,62 @@ fun RemindersScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        imageVector = if (searchQuery.isBlank()) Icons.Default.Notifications else Icons.Default.SearchOff,
+                        imageVector = when {
+                            searchQuery.isNotBlank() -> Icons.Default.SearchOff
+                            isFilterActive -> Icons.Default.FilterList
+                            else -> Icons.Default.Notifications
+                        },
                         contentDescription = null,
                         modifier = Modifier.size(80.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = if (searchQuery.isBlank()) "No reminders yet" else "No matching reminders",
+                        text = when {
+                            searchQuery.isNotBlank() -> "No matching reminders"
+                            isFilterActive -> "No reminders in selected date range"
+                            else -> "No reminders yet"
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (searchQuery.isBlank()) "Tap the + button to create a reminder" else "Try a different search term",
+                        text = when {
+                            searchQuery.isNotBlank() -> "Try a different search term"
+                            isFilterActive -> {
+                                val dateRange = buildString {
+                                    startDate?.let { append(dateFormatter.format(it.time)) }
+                                    append(" - ")
+                                    endDate?.let { append(dateFormatter.format(it.time)) }
+                                }
+                                "Current filter: $dateRange"
+                            }
+                            else -> "Tap the + button to create a reminder"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
+                    
+                    // Show clear filter button when filter is active
+                    if (isFilterActive) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedButton(
+                            onClick = {
+                                startDate = null
+                                endDate = null
+                                isFilterActive = false
+                            }
+                        ) {
+                            Text("Clear Filter")
+                        }
+                    }
                 }
             }
         } else {
-            // List of reminders (filtered by search if applicable)
+            // List of reminders (filtered by search/date if applicable)
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -187,6 +450,65 @@ fun RemindersScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
+                // Show active filter indicator
+                if (isFilterActive) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FilterList,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = buildString {
+                                            append("Filtered: ")
+                                            startDate?.let { append(dateFormatter.format(it.time)) } ?: append("Any")
+                                            append(" - ")
+                                            endDate?.let { append(dateFormatter.format(it.time)) } ?: append("Any")
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                
+                                IconButton(
+                                    onClick = {
+                                        startDate = null
+                                        endDate = null
+                                        isFilterActive = false
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear Filter",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Reminder items
                 items(filteredReminders) { reminder ->
                     ReminderCard(
                         reminder = reminder,
