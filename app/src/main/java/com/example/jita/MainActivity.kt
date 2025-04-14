@@ -173,6 +173,12 @@ import com.example.jita.data.NoteDao
 import com.example.jita.data.FolderDao
 import com.example.jita.data.NoteEntity
 import com.example.jita.data.FolderEntity
+import android.os.PowerManager
+import android.provider.Settings
+import android.app.AlarmManager
+import androidx.lifecycle.lifecycleScope
+import com.example.jita.alarm.AlarmScheduler
+import com.example.jita.model.toReminder
 
 
 object AppDestinations {
@@ -263,6 +269,12 @@ class MainActivity : ComponentActivity() {
         val noteDao = database.noteDao()  // Add this line
         val folderDao = database.folderDao()  // Add this line
         val reminderDao = database.reminderDao()  // Add this line
+
+        // Request necessary permissions for alarms to work in background
+        requestPermissions()
+
+        // Ensure all alarms are scheduled properly
+        checkAndRestoreAlarms()
 
         setContent {
             // --- Coroutine Scope ---
@@ -522,6 +534,79 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    // Add this after onCreate or in a separate method
+    private fun requestPermissions() {
+        // Request battery optimization exception
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val packageName = packageName
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    // Request the user to disable battery optimization for this app
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Failed to request ignore battery optimizations", e)
+                }
+            }
+        }
+        
+        // Request system alert window permission if not granted
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            try {
+                // Request the permission to draw over other apps
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to request overlay permission", e)
+            }
+        }
+        
+        // Check for alarm permissions on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!alarmManager.canScheduleExactAlarms()) {
+                try {
+                    // Direct the user to the exact alarm settings
+                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Failed to request exact alarm permission", e)
+                }
+            }
+        }
+    }
+
+    private fun checkAndRestoreAlarms() {
+        try {
+            val alarmScheduler = AlarmScheduler(this)
+            
+            // In a coroutine, check all alarms and reschedule them if needed
+            lifecycleScope.launch(Dispatchers.IO) {
+                val reminderDao = AppDatabase.getDatabase(applicationContext).reminderDao()
+                val reminders = reminderDao.getAllRemindersAsList()
+                
+                // Current time for filtering out passed reminders
+                val currentTime = Calendar.getInstance().timeInMillis
+                
+                for (reminderEntity in reminders) {
+                    val reminder = reminderEntity.toReminder()
+                    if (reminder.time.timeInMillis > currentTime) {
+                        Log.d("MainActivity", "Ensuring alarm is scheduled for reminder: ${reminder.id}")
+                        // Cancel any existing alarm and reschedule it
+                        alarmScheduler.updateAlarm(reminder)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error checking alarms", e)
         }
     }
 }

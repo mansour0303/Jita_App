@@ -1,5 +1,6 @@
 package com.example.jita.alarm
 
+import android.app.ActivityOptions
 import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -62,7 +63,7 @@ class AlarmService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "Alarm service started")
+        Log.d(TAG, "Alarm service started with flag: $flags and startId: $startId")
 
         // Get reminder ID from intent
         val reminderId = intent?.getIntExtra(EXTRA_REMINDER_ID, -1) ?: -1
@@ -72,14 +73,15 @@ class AlarmService : Service() {
             return Service.START_NOT_STICKY
         }
 
-        // Acquire wake lock
+        // Acquire wake lock with longer timeout
         if (!wakeLock.isHeld) {
-            wakeLock.acquire(WAKELOCK_TIMEOUT)
+            wakeLock.acquire(10 * 60 * 1000L) // 10 minutes timeout
+            Log.d(TAG, "WakeLock acquired")
         }
 
-        // Show a persistent notification
-        val notification = createForegroundNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        // Show a persistent notification immediately - this is crucial for foreground service
+        val notification = createForegroundNotification(reminderId)
+        startForeground(NOTIFICATION_ID, notification.build())
 
         // Load reminder and start alarm
         coroutineScope.launch {
@@ -100,12 +102,8 @@ class AlarmService : Service() {
                     // Start the alarm sound and vibration
                     startAlarm(reminder)
                     
-                    // Show fullscreen alarm activity
-                    val fullscreenIntent = Intent(this@AlarmService, AlarmActivity::class.java).apply {
-                        putExtra(AlarmActivity.EXTRA_REMINDER_ID, reminderId)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                    startActivity(fullscreenIntent)
+                    // Launch AlarmActivity directly, in addition to the notification
+                    launchAlarmActivity(reminderId)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting alarm", e)
@@ -113,7 +111,8 @@ class AlarmService : Service() {
             }
         }
 
-        return Service.START_STICKY
+        // Return START_REDELIVER_INTENT to ensure the service restarts if killed
+        return Service.START_REDELIVER_INTENT
     }
 
     private suspend fun loadAttachedTasks(reminder: Reminder): List<Task> {
@@ -230,23 +229,98 @@ class AlarmService : Service() {
         }
     }
 
-    private fun createForegroundNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_notification)
-        .setContentTitle("Alarm")
-        .setContentText("Alarm is playing")
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setCategory(NotificationCompat.CATEGORY_ALARM)
-        .setOngoing(true)
-        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        .setContentIntent(
+    private fun launchAlarmActivity(reminderId: Int) {
+        val alarmActivityIntent = Intent(this, AlarmActivity::class.java).apply {
+            putExtra(EXTRA_REMINDER_ID, reminderId)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or 
+                     Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                     Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val options = ActivityOptions.makeBasic().apply {
+                setPendingIntentBackgroundActivityStartMode(
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                )
+            }
+            startActivity(alarmActivityIntent, options.toBundle())
+        } else {
+            startActivity(alarmActivityIntent)
+        }
+    }
+
+    private fun createForegroundNotification(reminderId: Int): NotificationCompat.Builder {
+        // Create a full-screen intent that will show the alarm activity even when the screen is locked
+        val fullScreenIntent = Intent(this, AlarmActivity::class.java).apply {
+            putExtra(EXTRA_REMINDER_ID, reminderId)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or 
+                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                     Intent.FLAG_FROM_BACKGROUND)
+        }
+        
+        // Create ActivityOptions to explicitly allow background activity starts
+        val activityOptions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14 (API 34)
+            ActivityOptions.makeBasic().apply {
+                setPendingIntentBackgroundActivityStartMode(
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                )
+                // Also set the creator mode for Android 15+
+                if (Build.VERSION.SDK_INT >= 35) { // Android 15 is expected to be API 35
+                    try {
+                        val method = ActivityOptions::class.java.getMethod(
+                            "setPendingIntentCreatorBackgroundActivityStartMode", 
+                            Int::class.java
+                        )
+                        method.invoke(this, ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to set creator mode", e)
+                    }
+                }
+            }.toBundle()
+        } else null
+        
+        // Create PendingIntent with the ActivityOptions
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val fullScreenPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             PendingIntent.getActivity(
                 this,
-                0,
-                Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                reminderId * 100, // Use a different request code from the regular PendingIntent
+                fullScreenIntent,
+                flags,
+                activityOptions
             )
+        } else {
+            PendingIntent.getActivity(
+                this,
+                reminderId * 100,
+                fullScreenIntent,
+                flags
+            )
+        }
+        
+        // Create regular content intent (for notification tap)
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            reminderId,
+            fullScreenIntent.clone() as Intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        .build()
+        
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Alarm")
+            .setContentText("Alarm is playing. Tap to view.")
+            .setPriority(NotificationCompat.PRIORITY_MAX) // Use MAX priority
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setOngoing(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(fullScreenPendingIntent, true) // This is crucial
+            .setContentIntent(contentIntent)
+            .setAutoCancel(false)
+            .setSound(null) // We'll play sounds ourselves
+            .setVibrate(null) // We'll handle vibration ourselves
+    }
 
     override fun onBind(intent: Intent?): IBinder? {
         return LocalBinder()

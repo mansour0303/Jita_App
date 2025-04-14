@@ -18,10 +18,13 @@
     <!-- Alarm permissions -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Wake lock permissions -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Foreground service permission -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -51,24 +54,46 @@
         <!-- Alarm Activity -->
         <activity
             android:name=".alarm.AlarmActivity"
-            android:exported="false"
+            android:exported="true"
             android:theme="@style/Theme.Jita"
             android:showOnLockScreen="true"
             android:showWhenLocked="true"
-            android:turnScreenOn="true" />
+            android:turnScreenOn="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=".alarm"
+            android:documentLaunchMode="always"
+            android:excludeFromRecents="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="com.example.jita.action.ALARM_TRIGGERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         
         <!-- Alarm Service -->
         <service
             android:name=".alarm.AlarmService"
             android:enabled="true"
             android:exported="false"
+            android:directBootAware="true"
             android:foregroundServiceType="mediaPlayback" />
             
         <!-- Alarm Receiver -->
-        <receiver
+        <receiver 
             android:name=".alarm.AlarmReceiver"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="true"
+            android:directBootAware="true"
+            android:process=":alarm_process">
+            <intent-filter>
+                <action android:name="com.example.jita.ALARM_TRIGGERED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
             
         <!-- Boot Completed Receiver to restore alarms after device reboot -->
         <receiver
