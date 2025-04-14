@@ -469,7 +469,8 @@ class MainActivity : ComponentActivity() {
                     // Add composable for the ReminderSettings screen
                     composable(AppDestinations.REMINDER_SETTINGS_SCREEN) {
                         ReminderSettingsScreen(
-                            navController = navController
+                            navController = navController,
+                            tasks = tasks
                         )
                     }
                     composable(
