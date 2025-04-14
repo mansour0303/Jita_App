@@ -185,6 +185,7 @@ object AppDestinations {
     const val NOTES_SCREEN = "notes"
     const val NOTE_EDITOR_SCREEN = "note_editor/{noteId}"
     const val REMINDERS_SCREEN = "reminders"
+    const val REMINDER_SETTINGS_SCREEN = "reminder_settings"
     
     // Helper functions for parameterized navigation
     fun createNoteEditorRoute(noteId: Int = -1): String {
@@ -462,6 +463,12 @@ class MainActivity : ComponentActivity() {
                     // Add composable for the Reminders screen
                     composable(AppDestinations.REMINDERS_SCREEN) {
                         RemindersScreen(
+                            navController = navController
+                        )
+                    }
+                    // Add composable for the ReminderSettings screen
+                    composable(AppDestinations.REMINDER_SETTINGS_SCREEN) {
+                        ReminderSettingsScreen(
                             navController = navController
                         )
                     }

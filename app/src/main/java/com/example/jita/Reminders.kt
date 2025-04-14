@@ -38,7 +38,8 @@ fun RemindersScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        // Handle adding new reminder
+                        // Navigate to reminder settings screen
+                        navController.navigate(AppDestinations.REMINDER_SETTINGS_SCREEN)
                     }) {
                         Icon(
                             imageVector = Icons.Filled.Add,
