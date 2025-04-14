@@ -45,12 +45,18 @@ import androidx.navigation.NavHostController
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import com.example.jita.data.ReminderDao
+import com.example.jita.data.ReminderEntity
+import com.example.jita.model.Reminder
+import com.example.jita.model.toEntity
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReminderSettingsScreen(
     navController: NavHostController,
-    tasks: List<Task>
+    tasks: List<Task>,
+    reminderDao: ReminderDao
 ) {
     // State for the reminder settings
     var selectedHour by remember { mutableStateOf(6) }
@@ -62,6 +68,9 @@ fun ReminderSettingsScreen(
     var reminderMessage by remember { mutableStateOf("") }
     var alarmSoundEnabled by remember { mutableStateOf(true) }
     var vibrationEnabled by remember { mutableStateOf(true) }
+    
+    // Coroutine scope for database operations
+    val coroutineScope = rememberCoroutineScope()
     
     // State for selected alarm sound
     var selectedSoundUri by remember { mutableStateOf<Uri?>(null) }
@@ -768,9 +777,32 @@ fun ReminderSettingsScreen(
                 
                 Button(
                     onClick = { 
-                        // Save reminder logic would go here
-                        // We would save the selectedSoundUri and vibrationEnabled settings
-                        navController.navigateUp() 
+                        // Create and save the reminder
+                        val newReminder = Reminder(
+                            name = reminderName.ifBlank { "Reminder" },
+                            message = reminderMessage,
+                            time = Calendar.getInstance().apply {
+                                set(Calendar.HOUR_OF_DAY, selectedHour)
+                                set(Calendar.MINUTE, selectedMinute)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                                // Set the date components
+                                set(Calendar.YEAR, selectedDate.get(Calendar.YEAR))
+                                set(Calendar.MONTH, selectedDate.get(Calendar.MONTH))
+                                set(Calendar.DAY_OF_MONTH, selectedDate.get(Calendar.DAY_OF_MONTH))
+                            },
+                            alarmSoundEnabled = alarmSoundEnabled,
+                            vibrationEnabled = vibrationEnabled,
+                            soundUri = selectedSoundUri,
+                            soundName = selectedSoundName,
+                            attachedTaskIds = attachedTasks.map { it.id }
+                        )
+                        
+                        // Save to database
+                        coroutineScope.launch {
+                            reminderDao.insertReminder(newReminder.toEntity())
+                            navController.navigateUp()
+                        }
                     },
                     modifier = Modifier.weight(1f)
                 ) {

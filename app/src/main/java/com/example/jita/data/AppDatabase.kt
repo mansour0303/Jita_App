@@ -9,8 +9,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [TaskEntity::class, ListNameEntity::class, NoteEntity::class, FolderEntity::class],
-    version = 11,
+    entities = [
+        ListNameEntity::class, 
+        TaskEntity::class, 
+        NoteEntity::class, 
+        FolderEntity::class,
+        ReminderEntity::class
+    ],
+    version = 2,  // Increment version number
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class)
@@ -20,6 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun noteDao(): NoteDao
     abstract fun folderDao(): FolderDao
+    abstract fun reminderDao(): ReminderDao
 
     companion object {
         // Singleton prevents multiple instances of database opening at the

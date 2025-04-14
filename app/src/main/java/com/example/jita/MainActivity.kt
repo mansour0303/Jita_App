@@ -257,6 +257,7 @@ class MainActivity : ComponentActivity() {
         val taskDao = database.taskDao()
         val noteDao = database.noteDao()  // Add this line
         val folderDao = database.folderDao()  // Add this line
+        val reminderDao = database.reminderDao()  // Add this line
 
         setContent {
             // --- Coroutine Scope ---
@@ -463,14 +464,16 @@ class MainActivity : ComponentActivity() {
                     // Add composable for the Reminders screen
                     composable(AppDestinations.REMINDERS_SCREEN) {
                         RemindersScreen(
-                            navController = navController
+                            navController = navController,
+                            reminderDao = reminderDao  // Pass the reminderDao
                         )
                     }
                     // Add composable for the ReminderSettings screen
                     composable(AppDestinations.REMINDER_SETTINGS_SCREEN) {
                         ReminderSettingsScreen(
                             navController = navController,
-                            tasks = tasks
+                            tasks = tasks,
+                            reminderDao = reminderDao  // Add this parameter
                         )
                     }
                     composable(
