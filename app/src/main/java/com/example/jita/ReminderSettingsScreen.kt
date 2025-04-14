@@ -1,4 +1,16 @@
 package com.example.jita
+
+import android.Manifest
+import android.content.Context
+import android.media.MediaPlayer
+import android.net.Uri
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresPermission
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -26,7 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.navigation.NavHostController
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -46,6 +62,88 @@ fun ReminderSettingsScreen(
     var reminderMessage by remember { mutableStateOf("") }
     var alarmSoundEnabled by remember { mutableStateOf(true) }
     var vibrationEnabled by remember { mutableStateOf(true) }
+    
+    // State for selected alarm sound
+    var selectedSoundUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedSoundName by remember { mutableStateOf("Default Alarm") }
+    
+    // Media player for sound preview
+    val context = LocalContext.current
+    val mediaPlayer = remember { MediaPlayer() }
+    var isPlaying by remember { mutableStateOf(false) }
+    
+    // For vibration testing
+    val vibrator = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    }
+    
+    // Clean up media player when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            if (mediaPlayer.isPlaying) {
+                mediaPlayer.stop()
+            }
+            mediaPlayer.release()
+        }
+    }
+    
+    // Function to test vibration
+    @RequiresPermission(Manifest.permission.VIBRATE)
+    fun testVibration() {
+        if (vibrationEnabled) {
+            vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
+    }
+    
+    // Function to play/stop sound preview
+    fun toggleSoundPreview() {
+        if (isPlaying) {
+            mediaPlayer.stop()
+            mediaPlayer.reset()
+            isPlaying = false
+        } else if (alarmSoundEnabled) {
+            try {
+                mediaPlayer.reset()
+                if (selectedSoundUri != null) {
+                    mediaPlayer.setDataSource(context, selectedSoundUri!!)
+                } else {
+                    // Use default system alarm sound or a bundled sound
+                    val defaultUri = android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI
+                    mediaPlayer.setDataSource(context, defaultUri)
+                }
+                mediaPlayer.prepare()
+                mediaPlayer.isLooping = true
+                mediaPlayer.start()
+                isPlaying = true
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+    
+    // File picker for audio files
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            selectedSoundUri = it
+            // Get file name
+            context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        selectedSoundName = cursor.getString(nameIndex)
+                    }
+                }
+            }
+        }
+    }
     
     // State for attached tasks
     var attachedTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
@@ -520,42 +618,130 @@ fun ReminderSettingsScreen(
             
             Divider(modifier = Modifier.padding(vertical = 8.dp))
             
-            // Alarm sound
-            Row(
+            // Alarm sound (now clickable to select a sound file)
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (alarmSoundEnabled) 
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    else 
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
             ) {
-                Text(
-                    text = "Alarm sound",
-                    fontSize = 16.sp
-                )
-                Switch(
-                    checked = alarmSoundEnabled,
-                    onCheckedChange = { alarmSoundEnabled = it }
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Alarm sound",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Switch(
+                            checked = alarmSoundEnabled,
+                            onCheckedChange = { 
+                                alarmSoundEnabled = it 
+                                if (!it && isPlaying) {
+                                    // Stop playback if disabling sound
+                                    toggleSoundPreview()
+                                }
+                            }
+                        )
+                    }
+                    
+                    if (alarmSoundEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Sound selection row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    // Launch audio file picker
+                                    audioPickerLauncher.launch("audio/*")
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            Text(
+                                text = selectedSoundName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            IconButton(
+                                onClick = { toggleSoundPreview() }
+                            ) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "Stop Preview" else "Play Preview",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
             }
             
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
-            
-            // Vibration
-            Row(
+            // Vibration (with a test button)
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (vibrationEnabled) 
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    else 
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
             ) {
-                Text(
-                    text = "Vibration",
-                    fontSize = 16.sp
-                )
-                Switch(
-                    checked = vibrationEnabled,
-                    onCheckedChange = { vibrationEnabled = it }
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Vibration",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Switch(
+                            checked = vibrationEnabled,
+                            onCheckedChange = { vibrationEnabled = it }
+                        )
+                    }
+                    
+                    if (vibrationEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Button(
+                            onClick = { testVibration() },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Test Vibration")
+                        }
+                    }
+                }
             }
             
             Spacer(modifier = Modifier.weight(1f))
@@ -583,6 +769,7 @@ fun ReminderSettingsScreen(
                 Button(
                     onClick = { 
                         // Save reminder logic would go here
+                        // We would save the selectedSoundUri and vibrationEnabled settings
                         navController.navigateUp() 
                     },
                     modifier = Modifier.weight(1f)
