@@ -383,50 +383,127 @@ fun ReminderSettingsScreen(
                     if (attachedTasks.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Column {
-                            attachedTasks.forEach { task ->
-                                Row(
+                            attachedTasks.forEachIndexed { index, task ->
+                                // Task item row
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(vertical = 8.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .background(
-                                                color = when (task.priority) {
-                                                    TaskPriority.HIGH -> Color.Red
-                                                    TaskPriority.MEDIUM -> Color(0xFFFFA500) // Orange
-                                                    TaskPriority.LOW -> Color.Green
-                                                    else -> Color.Blue // Handle any other priority values
-                                                },
-                                                shape = RoundedCornerShape(4.dp)
-                                            )
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    
-                                    Text(
-                                        text = task.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    
-                                    IconButton(
-                                        onClick = {
-                                            attachedTasks = attachedTasks.filter { it.id != task.id }
-                                        },
-                                        modifier = Modifier.size(24.dp)
+                                    // Task header row with name and remove button
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Remove Task",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(16.dp)
+                                        // Priority indicator and name
+                                        Box(
+                                            modifier = Modifier
+                                                .size(12.dp)
+                                                .background(
+                                                    color = when (task.priority) {
+                                                        TaskPriority.HIGH -> Color.Red
+                                                        TaskPriority.MEDIUM -> Color(0xFFFFA500) // Orange
+                                                        TaskPriority.LOW -> Color.Green
+                                                        else -> Color.Blue // Handle any other priority values
+                                                    },
+                                                    shape = RoundedCornerShape(4.dp)
+                                                )
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        
+                                        Text(
+                                            text = task.name,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        
+                                        IconButton(
+                                            onClick = {
+                                                attachedTasks = attachedTasks.filter { it.id != task.id }
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Remove Task",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    // Task details
+                                    if (task.description.isNotBlank()) {
+                                        Text(
+                                            text = task.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(start = 20.dp, top = 4.dp)
                                         )
                                     }
+                                    
+                                    // Due date and list
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 20.dp, top = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Date
+                                        val dateFormat = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.DateRange,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = dateFormat.format(task.dueDate.time),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        
+                                        // List name (if available)
+                                        if (!task.list.isNullOrBlank()) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.List,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = task.list!!,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Add divider between tasks (except after the last one)
+                                if (index < attachedTasks.size - 1) {
+                                    Divider(
+                                        modifier = Modifier.padding(vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    )
                                 }
                             }
                         }
