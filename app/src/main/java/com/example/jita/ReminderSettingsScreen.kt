@@ -51,6 +51,8 @@ import com.example.jita.model.Reminder
 import com.example.jita.model.toEntity
 import com.example.jita.model.toReminder
 import kotlinx.coroutines.launch
+import com.example.jita.alarm.AlarmScheduler
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +70,10 @@ fun ReminderSettingsScreen(
     
     // State to store the existing reminder if in edit mode
     val existingReminder = remember { mutableStateOf<Reminder?>(null) }
+    
+    // Initialize the alarm scheduler
+    val context = LocalContext.current
+    val alarmScheduler = remember { AlarmScheduler(context) }
     
     // Load existing reminder if in edit mode
     LaunchedEffect(reminderId) {
@@ -160,7 +166,6 @@ fun ReminderSettingsScreen(
     }
     
     // Media player for sound preview
-    val context = LocalContext.current
     val mediaPlayer = remember { MediaPlayer() }
     var isPlaying by remember { mutableStateOf(false) }
     
@@ -256,6 +261,7 @@ fun ReminderSettingsScreen(
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
     
+    // Initialize the alarm scheduler
     // Date picker dialog for reminder date
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
@@ -876,33 +882,58 @@ fun ReminderSettingsScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 
                 Button(
-                    onClick = { 
-                        // Create or update the reminder
-                        val reminderToSave = Reminder(
-                            id = if (isEditMode) reminderId else 0, // Keep existing ID if editing
-                            name = reminderName.ifBlank { "Reminder" },
-                            message = reminderMessage,
-                            time = Calendar.getInstance().apply {
-                                set(Calendar.HOUR_OF_DAY, selectedHour)
-                                set(Calendar.MINUTE, selectedMinute)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                                // Set the date components
-                                set(Calendar.YEAR, selectedDate.get(Calendar.YEAR))
-                                set(Calendar.MONTH, selectedDate.get(Calendar.MONTH))
-                                set(Calendar.DAY_OF_MONTH, selectedDate.get(Calendar.DAY_OF_MONTH))
-                            },
-                            alarmSoundEnabled = alarmSoundEnabled,
-                            vibrationEnabled = vibrationEnabled,
-                            soundUri = selectedSoundUri,
-                            soundName = selectedSoundName,
-                            attachedTaskIds = attachedTasks.map { it.id }
-                        )
-                        
-                        // Save to database
-                        coroutineScope.launch {
-                            reminderDao.insertReminder(reminderToSave.toEntity())
-                            navController.navigateUp()
+                    onClick = {
+                        if (selectedDate.timeInMillis < today) {
+                            // Show date error
+                            Toast.makeText(
+                                context,
+                                "Please select a future date",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            // Create reminder object
+                            val reminderToSave = Reminder(
+                                id = if (isEditMode) reminderId else 0, // Keep existing ID if editing
+                                name = reminderName.ifBlank { "Reminder" },
+                                message = reminderMessage,
+                                time = Calendar.getInstance().apply {
+                                    set(Calendar.HOUR_OF_DAY, selectedHour)
+                                    set(Calendar.MINUTE, selectedMinute)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                    // Set the date components
+                                    set(Calendar.YEAR, selectedDate.get(Calendar.YEAR))
+                                    set(Calendar.MONTH, selectedDate.get(Calendar.MONTH))
+                                    set(Calendar.DAY_OF_MONTH, selectedDate.get(Calendar.DAY_OF_MONTH))
+                                },
+                                alarmSoundEnabled = alarmSoundEnabled,
+                                vibrationEnabled = vibrationEnabled,
+                                soundUri = selectedSoundUri,
+                                soundName = selectedSoundName,
+                                attachedTaskIds = attachedTasks.map { it.id }
+                            )
+                            
+                            // Save to database and schedule the alarm
+                            coroutineScope.launch {
+                                val savedId = reminderDao.insertReminder(reminderToSave.toEntity())
+                                
+                                // Schedule the alarm
+                                val finalReminder = if (isEditMode) {
+                                    reminderToSave
+                                } else {
+                                    // Use the generated ID for new reminders
+                                    reminderToSave.copy(id = savedId.toInt())
+                                }
+                                
+                                // Schedule or update the alarm
+                                if (isEditMode) {
+                                    alarmScheduler.updateAlarm(finalReminder)
+                                } else {
+                                    alarmScheduler.scheduleAlarm(finalReminder)
+                                }
+                                
+                                navController.navigateUp()
+                            }
                         }
                     },
                     modifier = Modifier.weight(1f)

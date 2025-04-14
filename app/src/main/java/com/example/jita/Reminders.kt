@@ -24,6 +24,8 @@ import com.example.jita.model.toReminder
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import com.example.jita.alarm.AlarmScheduler
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +87,10 @@ fun RemindersScreen(
             
             matchesSearch && matchesDateFilter
         }
+    
+    // Initialize alarm scheduler
+    val context = LocalContext.current
+    val alarmScheduler = remember { AlarmScheduler(context) }
     
     // Date filter dialog
     if (showDateFilterDialog) {
@@ -541,6 +547,10 @@ fun RemindersScreen(
                     onClick = {
                         reminderToDelete?.let { reminder ->
                             coroutineScope.launch {
+                                // Cancel the alarm
+                                alarmScheduler.cancelAlarm(reminder.id)
+                                
+                                // Delete from database
                                 reminderDao.deleteReminderById(reminder.id)
                             }
                         }
