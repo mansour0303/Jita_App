@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -39,30 +40,95 @@ fun RemindersScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var reminderToDelete by remember { mutableStateOf<Reminder?>(null) }
     
+    // Search related states
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Filter reminders based on search query
+    val filteredReminders = if (searchQuery.isBlank()) {
+        reminders.value.map { it.toReminder() }
+    } else {
+        reminders.value
+            .map { it.toReminder() }
+            .filter { reminder ->
+                reminder.name.contains(searchQuery, ignoreCase = true) ||
+                reminder.message.contains(searchQuery, ignoreCase = true)
+            }
+    }
+    
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    Text(
-                        text = "Reminders",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
+            if (isSearchActive) {
+                // Search bar when search is active
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    placeholder = { Text("Search reminders...") },
+                    leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search"
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                isSearchActive = false
+                                searchQuery = ""
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close Search"
+                            )
+                        }
+                    },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    ),
+                    shape = RoundedCornerShape(8.dp)
                 )
-            )
+            } else {
+                // Regular top app bar when search is not active
+                TopAppBar(
+                    title = { 
+                        Text(
+                            text = "Reminders",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.navigateUp() }) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search Reminders"
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -79,8 +145,8 @@ fun RemindersScreen(
             }
         }
     ) { paddingValues ->
-        if (reminders.value.isEmpty()) {
-            // Empty state
+        if (filteredReminders.isEmpty()) {
+            // Empty state or no search results
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -92,27 +158,27 @@ fun RemindersScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Notifications,
+                        imageVector = if (searchQuery.isBlank()) Icons.Default.Notifications else Icons.Default.SearchOff,
                         contentDescription = null,
                         modifier = Modifier.size(80.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "No reminders yet",
+                        text = if (searchQuery.isBlank()) "No reminders yet" else "No matching reminders",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Tap the + button to create a reminder",
+                        text = if (searchQuery.isBlank()) "Tap the + button to create a reminder" else "Try a different search term",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
         } else {
-            // List of reminders
+            // List of reminders (filtered by search if applicable)
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -121,7 +187,7 @@ fun RemindersScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                items(reminders.value.map { it.toReminder() }) { reminder ->
+                items(filteredReminders) { reminder ->
                     ReminderCard(
                         reminder = reminder,
                         onDeleteClick = {
