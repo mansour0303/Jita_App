@@ -948,9 +948,9 @@ fun MainScreen(
         AppDestinations.LISTS_SCREEN to "Lists",
         AppDestinations.POMODORO_SCREEN to "Pomodoro",
         AppDestinations.STATISTICS_SCREEN to "Statistics",
+        AppDestinations.NOTES_SCREEN to "Notes", // Moved Notes above Backup
         AppDestinations.BACKUP_SCREEN to "Backup",
-        AppDestinations.RESTORE_SCREEN to "Restore",
-        AppDestinations.NOTES_SCREEN to "Notes" // Add new drawer item
+        AppDestinations.RESTORE_SCREEN to "Restore"
     )
 
     // Local state for the Add Task Dialog form
