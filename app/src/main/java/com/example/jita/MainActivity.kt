@@ -470,7 +470,8 @@ class MainActivity : ComponentActivity() {
                     composable(AppDestinations.REMINDERS_SCREEN) {
                         RemindersScreen(
                             navController = navController,
-                            reminderDao = reminderDao  // Pass the reminderDao
+                            reminderDao = reminderDao,  // Pass the reminderDao
+                            tasks = tasks   // Pass the tasks list
                         )
                     }
                     // Add composable for the ReminderSettings screen

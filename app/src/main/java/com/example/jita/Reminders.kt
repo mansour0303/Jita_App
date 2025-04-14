@@ -1,15 +1,18 @@
 package com.example.jita
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,7 +28,8 @@ import java.util.*
 @Composable
 fun RemindersScreen(
     navController: NavHostController,
-    reminderDao: ReminderDao
+    reminderDao: ReminderDao,
+    tasks: List<Task> = emptyList()
 ) {
     // Collect reminders from the database
     val reminders = reminderDao.getAllReminders().collectAsState(initial = emptyList())
@@ -127,7 +131,8 @@ fun RemindersScreen(
                         onEditClick = {
                             // Navigate to edit screen with the reminder ID
                             navController.navigate(AppDestinations.createReminderEditorRoute(reminder.id))
-                        }
+                        },
+                        tasks = tasks
                     )
                 }
             }
@@ -179,10 +184,17 @@ fun RemindersScreen(
 fun ReminderCard(
     reminder: Reminder,
     onDeleteClick: () -> Unit,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    tasks: List<Task> = emptyList()
 ) {
     val timeFormatter = SimpleDateFormat("hh:mm a", Locale.getDefault())
     val dateFormatter = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
+    
+    // State to track if the attached tasks section is expanded
+    var isTasksSectionExpanded by remember { mutableStateOf(false) }
+    
+    // Filter to get only the tasks attached to this reminder
+    val attachedTasks = tasks.filter { task -> reminder.attachedTaskIds.contains(task.id) }
 
     Card(
         modifier = Modifier
@@ -252,6 +264,176 @@ fun ReminderCard(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+            
+            // Collapsible Attached Tasks section
+            if (attachedTasks.isNotEmpty()) {
+                Divider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+                
+                // Clickable header for expanding/collapsing
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = { isTasksSectionExpanded = !isTasksSectionExpanded })
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TaskAlt,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        Text(
+                            text = "Attached Tasks (${attachedTasks.size})",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    Icon(
+                        imageVector = if (isTasksSectionExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isTasksSectionExpanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
+                // Expandable content
+                if (isTasksSectionExpanded) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 26.dp) // Align with the header text
+                    ) {
+                        attachedTasks.forEach { task ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                ),
+                                elevation = CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp)
+                                ) {
+                                    // Task name and priority
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Priority indicator
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .background(
+                                                    color = when (task.priority) {
+                                                        TaskPriority.HIGH -> Color.Red
+                                                        TaskPriority.MEDIUM -> Color(0xFFFFA500) // Orange
+                                                        TaskPriority.LOW -> Color.Green
+                                                        else -> Color.Blue
+                                                    },
+                                                    shape = CircleShape
+                                                )
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        
+                                        Text(
+                                            text = task.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    
+                                    // Date and list name (if available)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, top = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Due date
+                                        val dueDateFormat = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Event,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = dueDateFormat.format(task.dueDate.time),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        
+                                        // List name (if available)
+                                        if (!task.list.isNullOrBlank()) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.List,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = task.list!!,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Description (if available)
+                                    if (task.description.isNotEmpty()) {
+                                        Text(
+                                            text = task.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             // Icons for sound and vibration
