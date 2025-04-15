@@ -53,6 +53,10 @@ import com.example.jita.model.toReminder
 import kotlinx.coroutines.launch
 import com.example.jita.alarm.AlarmScheduler
 import android.widget.Toast
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.TimePickerState
+import androidx.compose.material3.rememberTimePickerState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -436,6 +440,19 @@ fun ReminderSettingsScreen(
         }
     }
     
+    // State for the time picker
+    val timePickerState = rememberTimePickerState(
+        initialHour = selectedHour,
+        initialMinute = selectedMinute,
+        is24Hour = true
+    )
+
+    // Update selectedHour and selectedMinute when time changes
+    LaunchedEffect(timePickerState.hour, timePickerState.minute) {
+        selectedHour = timePickerState.hour
+        selectedMinute = timePickerState.minute
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -476,45 +493,17 @@ fun ReminderSettingsScreen(
                     .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // Time picker wheels
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .height(200.dp)
-                        .padding(horizontal = 16.dp)
-                ) {
-                    // Hour wheel
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        WheelPicker(
-                            items = (0..23).map { String.format("%02d", it) },
-                            initialIndex = selectedHour,
-                            onSelectionChanged = { selectedHour = it }
-                        )
-                    }
-                    
-                    // Colon
-                    Text(
-                        text = ":",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp)
+                // Material 3 Time Input
+                Card(
+                    modifier = Modifier.padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
-                    
-                    // Minute wheel
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        WheelPicker(
-                            items = (0..59).map { String.format("%02d", it) },
-                            initialIndex = selectedMinute,
-                            onSelectionChanged = { selectedMinute = it }
-                        )
-                    }
+                ) {
+                    TimeInput(
+                        state = timePickerState,
+                        modifier = Modifier.padding(24.dp)
+                    )
                 }
             }
             
@@ -1022,113 +1011,6 @@ fun TaskSelectionItem(
                 checked = isSelected,
                 onCheckedChange = { onToggleSelection() }
             )
-        }
-    }
-}
-
-@Composable
-fun WheelPicker(
-    items: List<String>,
-    initialIndex: Int = 0,
-    onSelectionChanged: (Int) -> Unit
-) {
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
-    val coroutineScope = rememberCoroutineScope()
-    
-    // Total item height
-    val itemHeight = 40.dp
-    
-    // The number of visible items
-    val visibleItems = 5
-    
-    // Track the currently centered item
-    val currentItem = remember { mutableStateOf(initialIndex) }
-    
-    // Create snapping behavior
-    val snapBehavior = rememberSnapFlingBehavior(
-        lazyListState = listState
-    )
-    
-    // Keep track of current selection
-    LaunchedEffect(listState.firstVisibleItemIndex) {
-        val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
-        if (visibleItemsInfo.isNotEmpty()) {
-            val centerPos = listState.layoutInfo.viewportEndOffset / 2
-            val centerItem = visibleItemsInfo.minByOrNull { 
-                kotlin.math.abs((it.offset + it.size / 2) - centerPos) 
-            }
-            centerItem?.let {
-                val selectedIndex = it.index - 1 // Adjust for the top padding item
-                if (selectedIndex >= 0 && selectedIndex < items.size && currentItem.value != selectedIndex) {
-                    currentItem.value = selectedIndex
-                    onSelectionChanged(selectedIndex)
-                }
-            }
-        }
-    }
-    
-    Box(
-        modifier = Modifier
-            .height(itemHeight * visibleItems)
-            .clip(RoundedCornerShape(8.dp))
-    ) {
-        // Center selector highlight
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .height(itemHeight)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-        )
-        
-        // Wheel items
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            flingBehavior = snapBehavior
-        ) {
-            // Add padding at the beginning so center item can be at the top
-            item { Spacer(modifier = Modifier.height(itemHeight * (visibleItems / 2))) }
-            
-            items(items.size) { index ->
-                // Calculate how far this item is from the center
-                val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
-                val layoutInfo = listState.layoutInfo
-                
-                val centerPos = layoutInfo.viewportEndOffset / 2
-                val itemInfo = visibleItemsInfo.find { it.index == index + 1 } // Adjust for top padding item
-                
-                // Calculate alpha based on distance from center
-                val alpha = if (itemInfo != null) {
-                    val itemCenter = itemInfo.offset + itemInfo.size / 2
-                    val distanceFromCenter = kotlin.math.abs(itemCenter - centerPos)
-                    val maxDistance = layoutInfo.viewportEndOffset / 2
-                    
-                    // Scale from 1.0 (at center) to 0.3 (at edges)
-                    (1.0f - (distanceFromCenter.toFloat() / maxDistance) * 0.7f).coerceIn(0.3f, 1.0f)
-                } else {
-                    0.3f
-                }
-                
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(itemHeight),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = items[index],
-                        fontSize = 20.sp,
-                        fontWeight = if (index == currentItem.value) FontWeight.Bold else FontWeight.Normal,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-            
-            // Add padding at the end so center item can be at the bottom
-            item { Spacer(modifier = Modifier.height(itemHeight * (visibleItems / 2))) }
         }
     }
 } 
