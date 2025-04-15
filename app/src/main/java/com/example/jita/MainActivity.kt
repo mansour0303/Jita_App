@@ -179,6 +179,7 @@ import android.app.AlarmManager
 import androidx.lifecycle.lifecycleScope
 import com.example.jita.alarm.AlarmScheduler
 import com.example.jita.model.toReminder
+import androidx.compose.foundation.isSystemInDarkTheme
 
 
 object AppDestinations {
@@ -1447,9 +1448,9 @@ fun MainScreen(
                             val headerDateFormatter = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
                             Text(
                                 text = headerDateFormatter.format(selectedDate.time),
-                                style = MaterialTheme.typography.bodyMedium, // Changed from titleMedium to bodyMedium
-                                fontWeight = FontWeight.Medium, // Changed from Bold to Medium
-                                color = Color(0xFF6C4CE0) // Light blue color instead of primary
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isSystemInDarkTheme()) Color.White else Color(0xFF6C4CE0)
                             )
                             
                             // Toggle button

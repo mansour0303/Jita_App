@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.jita.MainActivity
 import com.example.jita.data.AppDatabase
 import com.example.jita.model.toReminder
+import com.example.jita.ui.theme.JitaTheme
 import kotlinx.coroutines.launch
 
 class AlarmActivity : ComponentActivity() {
@@ -58,28 +59,31 @@ class AlarmActivity : ComponentActivity() {
         setContent {
             val reminderState by viewModel.reminderWithTasks.collectAsState(null)
             
-            reminderState?.let { reminderWithTasks ->
-                AlarmNotificationScreen(
-                    reminder = reminderWithTasks.reminder,
-                    attachedTasks = reminderWithTasks.tasks,
-                    onDeleteClick = {
-                        lifecycleScope.launch {
-                            // Delete reminder from database
-                            viewModel.deleteReminder()
-                            
-                            // Stop alarm service
+            // Wrap in JitaTheme to properly support dark mode
+            JitaTheme {
+                reminderState?.let { reminderWithTasks ->
+                    AlarmNotificationScreen(
+                        reminder = reminderWithTasks.reminder,
+                        attachedTasks = reminderWithTasks.tasks,
+                        onDeleteClick = {
+                            lifecycleScope.launch {
+                                // Delete reminder from database
+                                viewModel.deleteReminder()
+                                
+                                // Stop alarm service
+                                alarmService?.stopAlarm()
+                                
+                                // Close this activity
+                                navigateToMainAndFinish()
+                            }
+                        },
+                        onDismissClick = {
+                            // Stop alarm but keep reminder
                             alarmService?.stopAlarm()
-                            
-                            // Close this activity
                             navigateToMainAndFinish()
                         }
-                    },
-                    onDismissClick = {
-                        // Stop alarm but keep reminder
-                        alarmService?.stopAlarm()
-                        navigateToMainAndFinish()
-                    }
-                )
+                    )
+                }
             }
         }
     }

@@ -26,6 +26,15 @@ import com.example.jita.model.Reminder
 import java.text.SimpleDateFormat
 import java.util.*
 
+// Helper function to determine if the current theme is in light mode
+@Composable
+fun isLightTheme(): Boolean {
+    val background = MaterialTheme.colorScheme.background
+    // Calculate luminance - lighter colors have higher values
+    val luminance = (0.299 * background.red + 0.587 * background.green + 0.114 * background.blue)
+    return luminance > 0.5
+}
+
 @Composable
 fun AlarmNotificationScreen(
     reminder: Reminder,
@@ -33,6 +42,14 @@ fun AlarmNotificationScreen(
     onDeleteClick: () -> Unit,
     onDismissClick: () -> Unit
 ) {
+    // Determine if we're in light or dark theme
+    val isLight = isLightTheme()
+    
+    // Define priority colors that work well in both light and dark mode
+    val highPriorityColor = if (isLight) Color(0xFFE53935) else Color(0xFFFF5252)
+    val mediumPriorityColor = if (isLight) Color(0xFFFFA000) else Color(0xFFFFD54F)
+    val lowPriorityColor = if (isLight) Color(0xFF43A047) else Color(0xFF81C784)
+
     Dialog(
         onDismissRequest = { /* Do nothing to prevent accidental dismissal */ },
         properties = DialogProperties(
@@ -66,6 +83,7 @@ fun AlarmNotificationScreen(
                     text = reminder.name,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
@@ -86,11 +104,15 @@ fun AlarmNotificationScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 16.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
                     ) {
                         Text(
                             text = reminder.message,
                             style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp),
                             textAlign = TextAlign.Center
                         )
@@ -103,6 +125,7 @@ fun AlarmNotificationScreen(
                         text = "Attached Tasks",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .align(Alignment.Start)
                             .padding(top = 16.dp, bottom = 8.dp)
@@ -118,7 +141,10 @@ fun AlarmNotificationScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
                             ) {
                                 Column(
                                     modifier = Modifier
@@ -130,16 +156,16 @@ fun AlarmNotificationScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Priority indicator
+                                        // Priority indicator with adaptive colors
                                         Box(
                                             modifier = Modifier
                                                 .size(12.dp)
                                                 .background(
                                                     color = when (task.priority) {
-                                                        TaskPriority.HIGH -> Color.Red
-                                                        TaskPriority.MEDIUM -> Color(0xFFFFA500) // Orange
-                                                        TaskPriority.LOW -> Color.Green
-                                                        else -> Color.Blue
+                                                        TaskPriority.HIGH -> highPriorityColor
+                                                        TaskPriority.MEDIUM -> mediumPriorityColor
+                                                        TaskPriority.LOW -> lowPriorityColor
+                                                        else -> MaterialTheme.colorScheme.primary
                                                     },
                                                     shape = CircleShape
                                                 )
@@ -150,6 +176,7 @@ fun AlarmNotificationScreen(
                                         Text(
                                             text = task.name,
                                             style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
@@ -159,6 +186,7 @@ fun AlarmNotificationScreen(
                                         Text(
                                             text = task.description,
                                             style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.padding(start = 20.dp, top = 4.dp),
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
@@ -220,7 +248,8 @@ fun AlarmNotificationScreen(
                     Button(
                         onClick = onDeleteClick,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
                         ),
                         modifier = Modifier
                             .weight(1f)
@@ -237,7 +266,8 @@ fun AlarmNotificationScreen(
                     Button(
                         onClick = onDismissClick,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         modifier = Modifier
                             .weight(1f)
