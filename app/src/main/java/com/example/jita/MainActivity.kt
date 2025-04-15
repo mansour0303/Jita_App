@@ -4760,7 +4760,7 @@ fun BackupScreen(
                 ) {
                     Text(
                         text = "Data Summary",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
                     
@@ -4773,28 +4773,37 @@ fun BackupScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${listNameEntities.size}",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text("Lists")
+                            Text(
+                                text = "Lists",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                         
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${tasks.size}",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text("Tasks")
+                            Text(
+                                text = "Tasks",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                         
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${tasks.count { it.completed }}",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text("Completed")
+                            Text(
+                                text = "Completed",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                     
@@ -4808,19 +4817,25 @@ fun BackupScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${notes.size}",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text("Notes")
+                            Text(
+                                text = "Notes",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                         
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${folders.size}",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text("Folders")
+                            Text(
+                                text = "Folders",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
@@ -4857,7 +4872,7 @@ fun BackupScreen(
             }
             
             // Add more space between button and GIF
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             
             // GIF image - Replace bun with rab
             GifImage(
@@ -5334,7 +5349,7 @@ fun RestoreScreen(
             // GIF image
             GifImage(
                 modifier = Modifier.size(160.dp),
-                drawableResId = R.drawable.rab
+                drawableResId = R.drawable.cat
             )
         }
     }
