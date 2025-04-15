@@ -2863,12 +2863,9 @@ fun PomodoroScreen(
                     val gregorianDateFormat = SimpleDateFormat("EEE, MMM dd, yyyy", Locale.getDefault())
                     val gregorianDateString = gregorianDateFormat.format(selectedDate.time)
 
-                    // Get Jalali date (DD/MM format only)
-                    val jalaliDateString = getJalaliDateString(selectedDate)
-
                     // Combined Date Text
                     Text(
-                        text = "$gregorianDateString ($jalaliDateString)", // Display both dates
+                        text = gregorianDateString,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -4135,8 +4132,6 @@ fun WeekCalendar(
                     val dayCalendar = currentCalendar.clone() as Calendar
                     dayCalendar.set(Calendar.DAY_OF_MONTH, day)
 
-                    val jalaliDateStr = getJalaliDateString(dayCalendar)
-
                     val isToday = today.get(Calendar.YEAR) == currentCalendar.get(Calendar.YEAR) &&
                             today.get(Calendar.MONTH) == currentCalendar.get(Calendar.MONTH) &&
                             today.get(Calendar.DAY_OF_MONTH) == day
@@ -4200,12 +4195,7 @@ fun WeekCalendar(
                                     }
                                 } else Modifier
                             )
-                            Text(
-                                text = jalaliDateStr,
-                                fontSize = 10.sp,
-                                textAlign = TextAlign.Center,
-                                color = if (isSelected || isToday) textColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
-                            )
+                            // Removed Jalali date text
                         }
                     }
                 } else {
