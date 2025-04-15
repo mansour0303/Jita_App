@@ -1102,6 +1102,9 @@ fun MainScreen(
     var showTaskCompletionPopup by remember { mutableStateOf(false) }
     var completedTaskName by remember { mutableStateOf<String?>(null) } // To display task name in popup
 
+    // Add state for collapsible calendar
+    var isCalendarExpanded by remember { mutableStateOf(true) } // Start with calendar expanded
+    
     // Filter tasks for the selected date using the passed-in state and function
     val filteredTasks = remember(tasks, selectedDate) {
         tasks.filter { task -> isSameDay(task.dueDate, selectedDate) }
@@ -1429,12 +1432,46 @@ fun MainScreen(
                     }
                 } else {
                     // Regular calendar and task view
-                    // Pass the selected date and update callback to WeekCalendar
-                    WeekCalendar(
-                        selectedDate = selectedDate, // Use passed-in selectedDate
-                        onDateSelected = onDateSelected, // Use passed-in callback
-                        tasks = tasks // Pass all tasks to the calendar
-                    )
+                    
+                    // Calendar section with collapsible header
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Header row with date and collapse/expand button
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Date display
+                            val headerDateFormatter = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                            Text(
+                                text = headerDateFormatter.format(selectedDate.time),
+                                style = MaterialTheme.typography.bodyMedium, // Changed from titleMedium to bodyMedium
+                                fontWeight = FontWeight.Medium, // Changed from Bold to Medium
+                                color = Color(0xFF6C4CE0) // Light blue color instead of primary
+                            )
+                            
+                            // Toggle button
+                            IconButton(onClick = { isCalendarExpanded = !isCalendarExpanded }) {
+                                Icon(
+                                    imageVector = if (isCalendarExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = if (isCalendarExpanded) "Collapse Calendar" else "Expand Calendar",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        
+                        // Animated calendar visibility
+                        AnimatedVisibility(visible = isCalendarExpanded) {
+                            // Pass the selected date and update callback to WeekCalendar
+                            WeekCalendar(
+                                selectedDate = selectedDate, // Use passed-in selectedDate
+                                onDateSelected = onDateSelected, // Use passed-in callback
+                                tasks = tasks // Pass all tasks to the calendar
+                            )
+                        }
+                    }
 
                     // Format the date for the header using "MMMM d"
                     val headerDateFormatter = SimpleDateFormat("MMMM d", Locale.getDefault())
@@ -1476,7 +1513,7 @@ fun MainScreen(
                                 Spacer(modifier = Modifier.height(16.dp)) // Add space between text and GIF
                                 // Add the bun.gif using the existing GifImage composable
                                 GifImage(
-                                    modifier = Modifier.size(150.dp), // Adjust size as needed
+                                    modifier = Modifier.size(135.dp), // Adjust size as needed
                                     drawableResId = R.drawable.bun // Specify the bun GIF
                                 )
                             }
