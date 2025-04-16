@@ -3936,11 +3936,14 @@ fun TaskCard(
                                         .padding(start = 24.dp, top = 4.dp, bottom = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
+                                    val subtaskChecked = remember { mutableStateOf(false) }
+                                    Checkbox(
+                                        checked = subtaskChecked.value,
+                                        onCheckedChange = { isChecked ->
+                                            subtaskChecked.value = isChecked
+                                            // Additional logic to handle checked state can be added here
+                                        },
+                                        modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
