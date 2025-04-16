@@ -3522,6 +3522,10 @@ fun TaskCard(
     var showSubtaskDialog by remember { mutableStateOf(false) }
     var subtaskName by remember { mutableStateOf("") }
     var subtasksExpanded by remember { mutableStateOf(false) }
+    
+    // Variables for subtask deletion confirmation
+    var showDeleteSubtaskDialog by remember { mutableStateOf(false) }
+    var subtaskToDelete by remember { mutableStateOf<Pair<Int, String>?>(null) }
 
     // Use StartActivityForResult to have more control over the save intent
     val downloadLauncher = rememberLauncherForActivityResult(
@@ -3615,6 +3619,45 @@ fun TaskCard(
                     showSubtaskDialog = false
                     subtaskName = ""
                 }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Delete Subtask Confirmation Dialog
+    if (showDeleteSubtaskDialog && subtaskToDelete != null) {
+        val (index, name) = subtaskToDelete!!
+        AlertDialog(
+            onDismissRequest = { 
+                showDeleteSubtaskDialog = false 
+                subtaskToDelete = null
+            },
+            title = { Text("Delete Subtask") },
+            text = { Text("Are you sure you want to delete the subtask \"$name\"?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // Remove this subtask
+                        val updatedSubtasks = task.subtasks.toMutableList().apply {
+                            removeAt(index)
+                        }
+                        val updatedTask = task.copy(subtasks = updatedSubtasks)
+                        onUpdateSubtasks(updatedTask)
+                        showDeleteSubtaskDialog = false
+                        subtaskToDelete = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        showDeleteSubtaskDialog = false 
+                        subtaskToDelete = null
+                    }
+                ) {
                     Text("Cancel")
                 }
             }
@@ -3851,12 +3894,9 @@ fun TaskCard(
                                     )
                                     IconButton(
                                         onClick = {
-                                            // Remove this subtask
-                                            val updatedSubtasks = task.subtasks.toMutableList().apply {
-                                                removeAt(index)
-                                            }
-                                            val updatedTask = task.copy(subtasks = updatedSubtasks)
-                                            onUpdateSubtasks(updatedTask)
+                                            // Show confirmation dialog
+                                            subtaskToDelete = Pair(index, subtask)
+                                            showDeleteSubtaskDialog = true
                                         },
                                         modifier = Modifier.size(24.dp)
                                     ) {
