@@ -4903,6 +4903,10 @@ fun BackupScreen(
                         put("subtasks", JSONArray().apply {
                             task.subtasks.forEach { put(it) }
                         })
+                        // Add completedSubtasks as array
+                        put("completedSubtasks", JSONArray().apply {
+                            task.completedSubtasks.forEach { put(it) }
+                        })
                     })
                 }
                 put("tasks", tasksArray)
@@ -5446,10 +5450,19 @@ fun RestoreScreen(
                             }
                         }
                         
+                        // Process completedSubtasks
+                        val completedSubtasks = mutableListOf<Int>()
+                        val completedSubtasksArray = taskObj.optJSONArray("completedSubtasks")
+                        if (completedSubtasksArray != null) {
+                            for (j in 0 until completedSubtasksArray.length()) {
+                                completedSubtasks.add(completedSubtasksArray.getInt(j))
+                            }
+                        }
+                        
                         if (isCompleted) {
                             completedTaskCount++
                         }
-                        
+
                         taskEntities.add(
                             TaskEntity(
                                 id = if (taskObj.has("id")) taskObj.getInt("id") else 0,
@@ -5464,7 +5477,8 @@ fun RestoreScreen(
                                 completed = isCompleted,
                                 imagePaths = imagePaths,
                                 filePaths = filePaths,
-                                subtasks = subtasks
+                                subtasks = subtasks,
+                                completedSubtasks = completedSubtasks
                             )
                         )
                     }
