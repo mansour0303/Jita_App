@@ -3975,11 +3975,35 @@ fun TaskCard(
                                                 task.completedSubtasks.filter { it != index }
                                             }
                                             
+                                            // Check if all subtasks are now completed
+                                            val allSubtasksCompleted = if (isChecked) {
+                                                // If we're checking a box, see if this was the last unchecked subtask
+                                                updatedCompletedSubtasks.size == task.subtasks.size
+                                            } else {
+                                                false // If we're unchecking, then not all subtasks are completed
+                                            }
+                                            
                                             // Create updated task with the new completedSubtasks list
-                                            val updatedTask = task.copy(completedSubtasks = updatedCompletedSubtasks)
+                                            // Also update the task's completed status if all subtasks are completed
+                                            val updatedTask = if (allSubtasksCompleted && !task.completed) {
+                                                // All subtasks are completed, mark the task as completed too
+                                                task.copy(
+                                                    completedSubtasks = updatedCompletedSubtasks,
+                                                    completed = true
+                                                )
+                                            } else {
+                                                // Just update the completedSubtasks list
+                                                task.copy(completedSubtasks = updatedCompletedSubtasks)
+                                            }
                                             
                                             // Save the updated task
                                             onUpdateSubtasks(updatedTask)
+                                            
+                                            // If the task has just been automatically completed, trigger the completion popup
+                                            if (allSubtasksCompleted && !task.completed) {
+                                                // We use the onCompletedChange callback to ensure the popup shows
+                                                onCompletedChange(true)
+                                            }
                                         },
                                         modifier = Modifier.size(20.dp)
                                     )
