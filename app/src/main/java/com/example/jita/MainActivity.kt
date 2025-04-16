@@ -182,6 +182,11 @@ import androidx.lifecycle.lifecycleScope
 import com.example.jita.alarm.AlarmScheduler
 import com.example.jita.model.toReminder
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material.icons.filled.List
 
 
 object AppDestinations {
@@ -1480,141 +1485,237 @@ fun MainScreen(
                         }
                     }
 
-                    // Format the date for the header using "MMMM d"
-                    val headerDateFormatter = SimpleDateFormat("MMMM d", Locale.getDefault())
-                    val headerText = if (totalTrackedTime > 0) {
-                        "Tasks for ${headerDateFormatter.format(selectedDate.time)} ($formattedTotalTime)"
-                    } else {
-                        "Tasks for ${headerDateFormatter.format(selectedDate.time)}"
+                    // Add tab row for switching between Tasks and Time Log
+                    var selectedTabIndex by remember { mutableStateOf(0) }
+                    val tabs = listOf("Tasks", "Time Log")
+                    
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        indicator = { tabPositions ->
+                            TabRowDefaults.Indicator(
+                                Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    ) {
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTabIndex == index,
+                                onClick = { selectedTabIndex = index },
+                                text = { Text(title) }
+                            )
+                        }
                     }
 
-                    Text(
-                        text = headerText,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-
-                    // Display filtered tasks or empty message
-                    if (filteredTasks.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize() // Fill remaining space
-                                .padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // --- Edit Start ---
-                            // Use a Column to stack the text and the GIF
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    "No tasks for this day. Click + to add a task.",
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    textAlign = TextAlign.Center
-                                )
-                                Spacer(modifier = Modifier.height(16.dp)) // Add space between text and GIF
-                                // Add the bun.gif using the existing GifImage composable
-                                GifImage(
-                                    modifier = Modifier.size(135.dp), // Adjust size as needed
-                                    drawableResId = R.drawable.bun // Specify the bun GIF
-                                )
+                    // Content based on selected tab
+                    when (selectedTabIndex) {
+                        0 -> {
+                            // Tasks Tab Content
+                            // Format the date for the header using "MMMM d"
+                            val headerDateFormatter = SimpleDateFormat("MMMM d", Locale.getDefault())
+                            val headerText = if (totalTrackedTime > 0) {
+                                "Tasks for ${headerDateFormatter.format(selectedDate.time)} ($formattedTotalTime)"
+                            } else {
+                                "Tasks for ${headerDateFormatter.format(selectedDate.time)}"
                             }
-                            // --- Edit End ---
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize() // Fill remaining space
-                                .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(bottom = 8.dp) // Add padding at the bottom
-                        ) {
-                            items(filteredTasks, key = { task -> task.id }) { task -> // Use task.id as key
-                                // Get context inside the item scope where it's needed
-                                val context = LocalContext.current
-                                TaskCard(
-                                    task = task,
-                                    onDeleteClick = {
-                                        // Show confirmation dialog instead of deleting immediately
-                                        taskToDelete = task
-                                        showDeleteConfirmDialog = true
-                                    },
-                                    onEditClick = {
-                                        // Set the task to edit and show edit dialog
-                                        taskToEdit = task
-                                        // Pre-fill the edit form with task data
-                                        newTaskName = task.name
-                                        newTaskDescription = task.description
-                                        newTaskDate = task.dueDate.clone() as Calendar
-                                        newTaskPriority = task.priority
-                                        newTaskList = task.list
-                                        // Initialize attachment paths with current task data
-                                        newTaskImagePaths = task.imagePaths
-                                        newTaskFilePaths = task.filePaths
-                                        showEditTaskDialog = true
-                                    },
-                                    onClick = {
-                                        // Same as onEditClick
-                                        taskToEdit = task
-                                        newTaskName = task.name
-                                        newTaskDescription = task.description
-                                        newTaskDate = task.dueDate.clone() as Calendar
-                                        newTaskPriority = task.priority
-                                        newTaskList = task.list
-                                        showEditTaskDialog = true
-                                    },
-                                    onTrackingToggle = { isTracking ->
-                                        // Add more detailed logging
-                                        Log.d("MainScreen", "Tracking toggled for task: ${task.name}, isTracking: $isTracking")
 
-                                        val updatedTask = if (isTracking) {
-                                            // Start tracking
-                                            task.copy(
-                                                isTracking = true,
-                                                trackingStartTime = System.currentTimeMillis()
-                                            )
-                                        } else {
-                                            // Stop tracking and update total time
-                                            val elapsedTime = System.currentTimeMillis() - task.trackingStartTime
-                                            task.copy(
-                                                isTracking = false,
-                                                trackedTimeMillis = task.trackedTimeMillis + elapsedTime
-                                            )
-                                        }
+                            Text(
+                                text = headerText,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
 
-                                        // Add more logging to verify the updated task
-                                        Log.d("MainScreen", "Updated task: ${updatedTask.name}, isTracking: ${updatedTask.isTracking}, trackedTime: ${updatedTask.trackedTimeMillis}")
-
-                                        // Call the callback to update the task
-                                        onUpdateTask(updatedTask)
-                                    },
-                                    onCompletedChange = { isCompleted ->
-                                        // Create updated task with new completed state
-                                        val updatedTask = task.copy(completed = isCompleted)
-                                        // Call the callback to update the task
-                                        onUpdateTask(updatedTask)
-
-                                        // --- Additions for completion feedback ---
-                                        if (isCompleted) {
-                                            // Show popup
-                                            completedTaskName = task.name // Store name for popup
-                                            showTaskCompletionPopup = true
-                                            // Show toast using the context obtained within this scope
-                                            Toast.makeText(context, "Nice Job!", Toast.LENGTH_SHORT).show()
-                                        }
-                                        // --- End additions ---
-                                    },
-                                    currentTimeMillis = tickerState, // Pass current time for live updates
-                                    onUpdateSubtasks = { updatedTask ->
-                                        // Call the callback to update the task
-                                        onUpdateTask(updatedTask)
+                            // Original task list content
+                            if (filteredTasks.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize() // Fill remaining space
+                                        .padding(horizontal = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // --- Edit Start ---
+                                    // Use a Column to stack the text and the GIF
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            "No tasks for this day. Click + to add a task.",
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp)) // Add space between text and GIF
+                                        // Add the bun.gif using the existing GifImage composable
+                                        GifImage(
+                                            modifier = Modifier.size(110.dp), // Adjust size as needed
+                                            drawableResId = R.drawable.bun // Specify the bun GIF
+                                        )
                                     }
-                                )
+                                    // --- Edit End ---
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize() // Fill remaining space
+                                        .padding(horizontal = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(bottom = 8.dp) // Add padding at the bottom
+                                ) {
+                                    items(filteredTasks, key = { task -> task.id }) { task -> // Use task.id as key
+                                        // Get context inside the item scope where it's needed
+                                        val context = LocalContext.current
+                                        TaskCard(
+                                            task = task,
+                                            onDeleteClick = {
+                                                // Show confirmation dialog instead of deleting immediately
+                                                taskToDelete = task
+                                                showDeleteConfirmDialog = true
+                                            },
+                                            onEditClick = {
+                                                // Set the task to edit and show edit dialog
+                                                taskToEdit = task
+                                                // Pre-fill the edit form with task data
+                                                newTaskName = task.name
+                                                newTaskDescription = task.description
+                                                newTaskDate = task.dueDate.clone() as Calendar
+                                                newTaskPriority = task.priority
+                                                newTaskList = task.list
+                                                // Initialize attachment paths with current task data
+                                                newTaskImagePaths = task.imagePaths
+                                                newTaskFilePaths = task.filePaths
+                                                showEditTaskDialog = true
+                                            },
+                                            onClick = {
+                                                // Same as onEditClick
+                                                taskToEdit = task
+                                                newTaskName = task.name
+                                                newTaskDescription = task.description
+                                                newTaskDate = task.dueDate.clone() as Calendar
+                                                newTaskPriority = task.priority
+                                                newTaskList = task.list
+                                                showEditTaskDialog = true
+                                            },
+                                            onTrackingToggle = { isTracking ->
+                                                // Add more detailed logging
+                                                Log.d("MainScreen", "Tracking toggled for task: ${task.name}, isTracking: $isTracking")
+
+                                                val updatedTask = if (isTracking) {
+                                                    // Start tracking
+                                                    task.copy(
+                                                        isTracking = true,
+                                                        trackingStartTime = System.currentTimeMillis()
+                                                    )
+                                                } else {
+                                                    // Stop tracking and update total time
+                                                    val elapsedTime = System.currentTimeMillis() - task.trackingStartTime
+                                                    task.copy(
+                                                        isTracking = false,
+                                                        trackedTimeMillis = task.trackedTimeMillis + elapsedTime
+                                                    )
+                                                }
+
+                                                // Add more logging to verify the updated task
+                                                Log.d("MainScreen", "Updated task: ${updatedTask.name}, isTracking: ${updatedTask.isTracking}, trackedTime: ${updatedTask.trackedTimeMillis}")
+
+                                                // Call the callback to update the task
+                                                onUpdateTask(updatedTask)
+                                            },
+                                            onCompletedChange = { isCompleted ->
+                                                // Create updated task with new completed state
+                                                val updatedTask = task.copy(completed = isCompleted)
+                                                // Call the callback to update the task
+                                                onUpdateTask(updatedTask)
+
+                                                // --- Additions for completion feedback ---
+                                                if (isCompleted) {
+                                                    // Show popup
+                                                    completedTaskName = task.name // Store name for popup
+                                                    showTaskCompletionPopup = true
+                                                    // Show toast using the context obtained within this scope
+                                                    Toast.makeText(context, "Nice Job!", Toast.LENGTH_SHORT).show()
+                                                }
+                                                // --- End additions ---
+                                            },
+                                            currentTimeMillis = tickerState, // Pass current time for live updates
+                                            onUpdateSubtasks = { updatedTask ->
+                                                // Call the callback to update the task
+                                                onUpdateTask(updatedTask)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        1 -> {
+                            // Time Log Tab Content
+                            val headerDateFormatter = SimpleDateFormat("MMMM d", Locale.getDefault())
+                            Text(
+                                text = "Time Log for ${headerDateFormatter.format(selectedDate.time)}",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            
+                            // Get tasks with tracked time for the selected date
+                            val trackedTasks = remember(tasks, selectedDate) {
+                                tasks
+                                    .filter { task -> isSameDay(task.dueDate, selectedDate) && task.trackedTimeMillis > 0 }
+                                    .sortedByDescending { it.trackedTimeMillis }
+                            }
+                            
+                            if (trackedTasks.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            "No time tracking data for this day.",
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        GifImage(
+                                            modifier = Modifier.size(135.dp),
+                                            drawableResId = R.drawable.bun
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(bottom = 8.dp)
+                                ) {
+                                    items(trackedTasks, key = { task -> task.id }) { task ->
+                                        TimeLogItem(
+                                            task = task,
+                                            onClick = {
+                                                // Set the task to edit and show edit dialog
+                                                taskToEdit = task
+                                                // Pre-fill the edit form with task data
+                                                newTaskName = task.name
+                                                newTaskDescription = task.description
+                                                newTaskDate = task.dueDate.clone() as Calendar
+                                                newTaskPriority = task.priority
+                                                newTaskList = task.list
+                                                // Initialize attachment paths with current task data
+                                                newTaskImagePaths = task.imagePaths
+                                                newTaskFilePaths = task.filePaths
+                                                showEditTaskDialog = true
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -2756,6 +2857,95 @@ fun MainScreen(
     // --- End Task Completion Popup ---
 }
 
+@Composable
+fun TimeLogItem(
+    task: Task,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Task name and tracked time
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = task.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                // Display formatted time
+                val formattedTime = formatTime(task.trackedTimeMillis)
+                Text(
+                    text = formattedTime,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Task details (list, priority)
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Priority indicator
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(
+                            color = task.priority.color,
+                            shape = CircleShape
+                        )
+                )
+                
+                Spacer(modifier = Modifier.width(4.dp))
+                
+                // Priority text
+                Text(
+                    text = task.priority.label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Show list if available
+                if (!task.list.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Default.List,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = task.list!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
 // --- Pomodoro Screen ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -3376,9 +3566,8 @@ fun GifImage(
             .crossfade(true)
             .build(),
         contentDescription = "Timer Animation",
-        modifier = modifier.size(180.dp),  // Increased from 120.dp to 180.dp
-        imageLoader = imageLoader,
-        contentScale = ContentScale.Fit
+        modifier = modifier, // Use the provided modifier without adding size
+        imageLoader = imageLoader
     )
 }
 
