@@ -1608,10 +1608,7 @@ fun MainScreen(
                                         // --- End additions ---
                                     },
                                     currentTimeMillis = tickerState, // Pass current time for live updates
-                                    onAddSubtask = { originalTask, subtaskName ->
-                                        // Create updated task with new subtask added
-                                        val updatedSubtasks = originalTask.subtasks + subtaskName
-                                        val updatedTask = originalTask.copy(subtasks = updatedSubtasks)
+                                    onUpdateSubtasks = { updatedTask ->
                                         // Call the callback to update the task
                                         onUpdateTask(updatedTask)
                                     }
@@ -3514,7 +3511,7 @@ fun TaskCard(
     onTrackingToggle: (Boolean) -> Unit = {},
     onCompletedChange: (Boolean) -> Unit = {},
     currentTimeMillis: Long = 0,
-    onAddSubtask: (Task, String) -> Unit = { _, _ -> }
+    onUpdateSubtasks: (Task) -> Unit = { _ -> }
 ) {
     val dateFormatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
     val context = LocalContext.current
@@ -3599,7 +3596,10 @@ fun TaskCard(
                 TextButton(
                     onClick = {
                         if (subtaskName.isNotBlank()) {
-                            onAddSubtask(task, subtaskName)
+                            // Create updated task with new subtask added
+                            val updatedSubtasks = task.subtasks + subtaskName
+                            val updatedTask = task.copy(subtasks = updatedSubtasks)
+                            onUpdateSubtasks(updatedTask)
                             subtaskName = ""
                             showSubtaskDialog = false
                             // Auto-expand the subtasks section when a new one is added
@@ -3749,10 +3749,10 @@ fun TaskCard(
                     // Add three-dot menu
                     var showMenu by remember { mutableStateOf(false) }
                     Box {
-                        IconButton(
+                    IconButton(
                             onClick = { showMenu = true },
-                            modifier = Modifier.size(40.dp)
-                        ) {
+                        modifier = Modifier.size(40.dp)
+                    ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = "More Options",
@@ -3771,12 +3771,12 @@ fun TaskCard(
                                     showMenu = false
                                 },
                                 leadingIcon = {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = "Delete Task",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Delete Task",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                             )
                             DropdownMenuItem(
                                 text = { Text("Add Subtask") },
@@ -3829,7 +3829,7 @@ fun TaskCard(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            task.subtasks.forEach { subtask ->
+                            task.subtasks.forEachIndexed { index, subtask ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -3846,8 +3846,27 @@ fun TaskCard(
                                     Text(
                                         text = subtask,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
                                     )
+                                    IconButton(
+                                        onClick = {
+                                            // Remove this subtask
+                                            val updatedSubtasks = task.subtasks.toMutableList().apply {
+                                                removeAt(index)
+                                            }
+                                            val updatedTask = task.copy(subtasks = updatedSubtasks)
+                                            onUpdateSubtasks(updatedTask)
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = "Delete Subtask",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -5247,9 +5266,9 @@ fun RestoreScreen(
                         val imagePaths = mutableListOf<String>()
                         val imagePathsArray = taskObj.optJSONArray("imagePaths")
                         if (imagePathsArray != null) {
-                            for (j in 0 until imagePathsArray.length()) {
-                                val originalPath = imagePathsArray.getString(j)
-                                val fileName = originalPath.substringAfterLast('/')
+                        for (j in 0 until imagePathsArray.length()) {
+                            val originalPath = imagePathsArray.getString(j)
+                            val fileName = originalPath.substringAfterLast('/')
                                 val updatedPath = restoredFiles[fileName]
                                 if (updatedPath != null) {
                                     imagePaths.add(updatedPath)
@@ -5260,9 +5279,9 @@ fun RestoreScreen(
                         val filePaths = mutableListOf<String>()
                         val filePathsArray = taskObj.optJSONArray("filePaths")
                         if (filePathsArray != null) {
-                            for (j in 0 until filePathsArray.length()) {
-                                val originalPath = filePathsArray.getString(j)
-                                val fileName = originalPath.substringAfterLast('/')
+                        for (j in 0 until filePathsArray.length()) {
+                            val originalPath = filePathsArray.getString(j)
+                            val fileName = originalPath.substringAfterLast('/')
                                 val updatedPath = restoredFiles[fileName]
                                 if (updatedPath != null) {
                                     filePaths.add(updatedPath)

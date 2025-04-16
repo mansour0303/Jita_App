@@ -85,7 +85,7 @@ abstract class AppDatabase : RoomDatabase() {
                 
                 // Rename new table to match original name
                 database.execSQL("ALTER TABLE tasks_new RENAME TO tasks")
-                
+
                 // Create the notes and folders tables
                 database.execSQL(
                     """
