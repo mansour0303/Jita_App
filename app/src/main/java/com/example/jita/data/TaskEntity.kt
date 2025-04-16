@@ -19,5 +19,6 @@ data class TaskEntity(
     val trackingStartTime: Long = 0,
     val completed: Boolean = false,
     val imagePaths: List<String> = emptyList(),
-    val filePaths: List<String> = emptyList()
+    val filePaths: List<String> = emptyList(),
+    val subtasks: List<String> = emptyList()
 )

@@ -4411,7 +4411,8 @@ fun TaskSelectionDialog(
                 trackingStartTime = entity.trackingStartTime,
                 completed = entity.completed,
                 imagePaths = entity.imagePaths,
-                filePaths = entity.filePaths
+                filePaths = entity.filePaths,
+                subtasks = entity.subtasks
             )
         }
     }

@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FolderEntity::class,
         ReminderEntity::class
     ],
-    version = 2,  // Increment version number
+    version = 12,  // Increment version number from 11 to 12
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class)
@@ -34,10 +34,18 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        // Migration from version 2 to 3 (adding imagePaths and filePaths lists)
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
+        // Migration from 11 to 12 - Add subtasks column to tasks table
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // Create temporary table with new schema
+                // Add subtasks column to tasks table
+                database.execSQL("ALTER TABLE tasks ADD COLUMN subtasks TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+        
+        // Direct migration from version 2 to 12
+        private val MIGRATION_2_12 = object : Migration(2, 12) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create a new tasks table with all the required columns
                 database.execSQL(
                     """
                     CREATE TABLE tasks_new (
@@ -52,24 +60,22 @@ abstract class AppDatabase : RoomDatabase() {
                         trackingStartTime INTEGER NOT NULL DEFAULT 0,
                         completed INTEGER NOT NULL DEFAULT 0,
                         imagePaths TEXT NOT NULL DEFAULT '[]',
-                        filePaths TEXT NOT NULL DEFAULT '[]'
+                        filePaths TEXT NOT NULL DEFAULT '[]',
+                        subtasks TEXT NOT NULL DEFAULT '[]'
                     )
                     """
                 )
                 
-                // Copy data from old table to new, converting single paths to lists
+                // Copy data from old table to new
                 database.execSQL(
                     """
                     INSERT INTO tasks_new (
                         id, name, description, dueDate, priority, list, 
-                        trackedTimeMillis, isTracking, trackingStartTime, completed,
-                        imagePaths, filePaths
+                        trackedTimeMillis, isTracking, trackingStartTime, completed
                     ) 
                     SELECT 
                         id, name, description, dueDate, priority, list, 
-                        trackedTimeMillis, isTracking, trackingStartTime, completed,
-                        CASE WHEN imagePath IS NULL THEN '[]' ELSE '[' || '"' || imagePath || '"' || ']' END,
-                        CASE WHEN filePath IS NULL THEN '[]' ELSE '[' || '"' || filePath || '"' || ']' END
+                        trackedTimeMillis, isTracking, trackingStartTime, completed
                     FROM tasks
                     """
                 )
@@ -79,64 +85,24 @@ abstract class AppDatabase : RoomDatabase() {
                 
                 // Rename new table to match original name
                 database.execSQL("ALTER TABLE tasks_new RENAME TO tasks")
-            }
-        }
-
-        // Migration from version 3 to 4 (adding notes and folders tables)
-        private val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Create folders table
+                
+                // Create the notes and folders tables
                 database.execSQL(
                     """
-                    CREATE TABLE folders (
+                    CREATE TABLE IF NOT EXISTS folders (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         name TEXT NOT NULL,
                         parentId INTEGER,
                         createdAt INTEGER NOT NULL DEFAULT 0,
+                        color TEXT,
                         FOREIGN KEY (parentId) REFERENCES folders(id) ON DELETE CASCADE
                     )
                     """
                 )
                 
-                // Create notes table
                 database.execSQL(
                     """
-                    CREATE TABLE notes (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        title TEXT NOT NULL,
-                        content TEXT NOT NULL,
-                        folderId INTEGER NOT NULL,
-                        createdAt INTEGER NOT NULL DEFAULT 0,
-                        updatedAt INTEGER NOT NULL DEFAULT 0,
-                        FOREIGN KEY (folderId) REFERENCES folders(id) ON DELETE CASCADE
-                    )
-                    """
-                )
-            }
-        }
-
-        // Migration from version 4 to 5 (handling schema changes)
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // This empty migration handles any schema hash changes
-                // without requiring specific schema modifications
-            }
-        }
-
-        // Migration from version 5 to 6 (adding styles column to notes table)
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE notes ADD COLUMN styles TEXT")
-            }
-        }
-
-        // Migration from version 6 to 7 (making folderId nullable in notes table)
-        private val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Create temporary table with new schema
-                database.execSQL(
-                    """
-                    CREATE TABLE notes_new (
+                    CREATE TABLE IF NOT EXISTS notes (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         title TEXT NOT NULL,
                         content TEXT NOT NULL,
@@ -144,114 +110,45 @@ abstract class AppDatabase : RoomDatabase() {
                         createdAt INTEGER NOT NULL DEFAULT 0,
                         updatedAt INTEGER NOT NULL DEFAULT 0,
                         styles TEXT,
+                        checkboxItems TEXT,
+                        voiceRecordings TEXT,
+                        fileAttachments TEXT,
+                        color TEXT,
+                        isArchived INTEGER NOT NULL DEFAULT 0,
+                        isPinned INTEGER NOT NULL DEFAULT 0,
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        imageAttachments TEXT,
                         FOREIGN KEY (folderId) REFERENCES folders(id) ON DELETE CASCADE
                     )
                     """
                 )
                 
-                // Copy data from old table to new
+                // Create reminders table if it doesn't exist yet
                 database.execSQL(
                     """
-                    INSERT INTO notes_new (
-                        id, title, content, folderId, createdAt, updatedAt, styles
-                    ) 
-                    SELECT 
-                        id, title, content, folderId, createdAt, updatedAt, styles
-                    FROM notes
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        timeInMillis INTEGER NOT NULL,
+                        alarmSoundEnabled INTEGER NOT NULL,
+                        vibrationEnabled INTEGER NOT NULL,
+                        soundUri TEXT,
+                        soundName TEXT,
+                        attachedTaskIds TEXT NOT NULL DEFAULT ''
+                    )
                     """
                 )
                 
-                // Drop old table
-                database.execSQL("DROP TABLE notes")
-                
-                // Rename new table to match original name
-                database.execSQL("ALTER TABLE notes_new RENAME TO notes")
-            }
-        }
-
-        // Migration from version 7 to 8 (adding checkboxItems column to notes table)
-        private val MIGRATION_7_8 = object : Migration(7, 8) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Add the new column
-                database.execSQL("ALTER TABLE notes ADD COLUMN checkboxItems TEXT")
-            }
-        }
-
-        // Migration from version 8 to 9 (adding voiceRecordings and fileAttachments columns to notes table)
-        private val MIGRATION_8_9 = object : Migration(8, 9) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Check and add columns only if they don't exist
-                // First, get column information for the notes table
-                val tableInfo = database.query("PRAGMA table_info(notes)")
-                val columnNames = mutableSetOf<String>()
-                
-                // Collect existing column names
-                tableInfo.use {
-                    while (it.moveToNext()) {
-                        val columnName = it.getString(it.getColumnIndex("name"))
-                        columnNames.add(columnName)
-                    }
-                }
-                
-                // Add voiceRecordings column if it doesn't exist
-                if (!columnNames.contains("voiceRecordings")) {
-                    database.execSQL("ALTER TABLE notes ADD COLUMN voiceRecordings TEXT")
-                }
-                
-                // Add fileAttachments column if it doesn't exist
-                if (!columnNames.contains("fileAttachments")) {
-                    database.execSQL("ALTER TABLE notes ADD COLUMN fileAttachments TEXT")
-                }
-                
-                // Add color column if it doesn't exist
-                if (!columnNames.contains("color")) {
-                    database.execSQL("ALTER TABLE notes ADD COLUMN color TEXT")
-                }
-                
-                // Add isArchived column if it doesn't exist
-                if (!columnNames.contains("isArchived")) {
-                    database.execSQL("ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0")
-                }
-                
-                // Add isPinned column if it doesn't exist
-                if (!columnNames.contains("isPinned")) {
-                    database.execSQL("ALTER TABLE notes ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
-                }
-                
-                // Add isDeleted column if it doesn't exist
-                if (!columnNames.contains("isDeleted")) {
-                    database.execSQL("ALTER TABLE notes ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
-                }
-            }
-        }
-
-        // Migration from version 9 to 10 (adding imageAttachments column to notes table)
-        private val MIGRATION_9_10 = object : Migration(9, 10) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Add imageAttachments column if it doesn't exist
-                val tableInfo = database.query("PRAGMA table_info(notes)")
-                val columnNames = mutableSetOf<String>()
-                
-                // Collect existing column names
-                tableInfo.use {
-                    while (it.moveToNext()) {
-                        val columnName = it.getString(it.getColumnIndex("name"))
-                        columnNames.add(columnName)
-                    }
-                }
-                
-                // Add imageAttachments column if it doesn't exist
-                if (!columnNames.contains("imageAttachments")) {
-                    database.execSQL("ALTER TABLE notes ADD COLUMN imageAttachments TEXT")
-                }
-            }
-        }
-
-        // Migration from 10 to 11 - Add color column to folders table
-        private val MIGRATION_10_11 = object : Migration(10, 11) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Add color column to folders table
-                database.execSQL("ALTER TABLE folders ADD COLUMN color TEXT")
+                // Create list_names table if it doesn't exist yet
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS list_names (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL
+                    )
+                    """
+                )
             }
         }
 
@@ -264,7 +161,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                // Use the direct migration from 2 to 12 instead of all intermediate migrations
+                .addMigrations(MIGRATION_2_12)
                 .fallbackToDestructiveMigration() // Add this to handle severe migration issues
                 .build()
                 INSTANCE = instance

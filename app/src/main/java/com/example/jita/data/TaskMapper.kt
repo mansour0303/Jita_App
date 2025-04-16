@@ -25,7 +25,8 @@ fun TaskEntity.toTask(): Task {
         trackingStartTime = trackingStartTime,
         completed = completed,
         imagePaths = imagePaths,
-        filePaths = filePaths
+        filePaths = filePaths,
+        subtasks = subtasks
     )
 }
 
@@ -45,6 +46,7 @@ fun Task.toTaskEntity(): TaskEntity {
         trackingStartTime = trackingStartTime,
         completed = completed,
         imagePaths = imagePaths,
-        filePaths = filePaths
+        filePaths = filePaths,
+        subtasks = subtasks
     )
 } 

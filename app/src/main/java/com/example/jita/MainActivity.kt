@@ -233,7 +233,8 @@ fun Task.toTaskEntity(): TaskEntity {
         trackingStartTime = this.trackingStartTime,
         completed = this.completed,  // Add completed flag
         imagePaths = this.imagePaths,
-        filePaths = this.filePaths
+        filePaths = this.filePaths,
+        subtasks = this.subtasks
     )
 }
 
@@ -317,7 +318,8 @@ class MainActivity : ComponentActivity() {
                         trackingStartTime = entity.trackingStartTime,
                         completed = entity.completed,  // Add completed flag
                         imagePaths = entity.imagePaths,
-                        filePaths = entity.filePaths
+                        filePaths = entity.filePaths,
+                        subtasks = entity.subtasks
                     )
                 }.toMutableStateList()
             }
@@ -1605,7 +1607,14 @@ fun MainScreen(
                                         }
                                         // --- End additions ---
                                     },
-                                    currentTimeMillis = tickerState // Pass current time for live updates
+                                    currentTimeMillis = tickerState, // Pass current time for live updates
+                                    onAddSubtask = { originalTask, subtaskName ->
+                                        // Create updated task with new subtask added
+                                        val updatedSubtasks = originalTask.subtasks + subtaskName
+                                        val updatedTask = originalTask.copy(subtasks = updatedSubtasks)
+                                        // Call the callback to update the task
+                                        onUpdateTask(updatedTask)
+                                    }
                                 )
                             }
                         }
@@ -3444,7 +3453,8 @@ data class Task(
     val trackingStartTime: Long = 0,
     val completed: Boolean = false,
     val imagePaths: List<String> = emptyList(),  // Changed from single path to list
-    val filePaths: List<String> = emptyList()    // Changed from single path to list
+    val filePaths: List<String> = emptyList(),    // Changed from single path to list
+    val subtasks: List<String> = emptyList()     // Added subtasks as a list of strings
 )
 
 // Task priority enum
@@ -3503,12 +3513,18 @@ fun TaskCard(
     onClick: () -> Unit = {},
     onTrackingToggle: (Boolean) -> Unit = {},
     onCompletedChange: (Boolean) -> Unit = {},
-    currentTimeMillis: Long = 0
+    currentTimeMillis: Long = 0,
+    onAddSubtask: (Task, String) -> Unit = { _, _ -> }
 ) {
     val dateFormatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
     val context = LocalContext.current
     // Add missing variable to store current download source path
     var currentDownloadSource by remember { mutableStateOf<String?>(null) }
+    
+    // Variables for subtask dialog
+    var showSubtaskDialog by remember { mutableStateOf(false) }
+    var subtaskName by remember { mutableStateOf("") }
+    var subtasksExpanded by remember { mutableStateOf(false) }
 
     // Use StartActivityForResult to have more control over the save intent
     val downloadLauncher = rememberLauncherForActivityResult(
@@ -3558,6 +3574,51 @@ fun TaskCard(
                 color = MaterialTheme.colorScheme.primary
             )
         }
+    }
+
+    // Add Subtask Dialog
+    if (showSubtaskDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showSubtaskDialog = false
+                subtaskName = ""
+            },
+            title = { Text("Add Subtask") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = subtaskName,
+                        onValueChange = { subtaskName = it },
+                        label = { Text("Subtask Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (subtaskName.isNotBlank()) {
+                            onAddSubtask(task, subtaskName)
+                            subtaskName = ""
+                            showSubtaskDialog = false
+                            // Auto-expand the subtasks section when a new one is added
+                            subtasksExpanded = true
+                        }
+                    }
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showSubtaskDialog = false
+                    subtaskName = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Card(
@@ -3720,8 +3781,8 @@ fun TaskCard(
                             DropdownMenuItem(
                                 text = { Text("Add Subtask") },
                                 onClick = {
-                                    // TODO: Implement add subtask functionality
                                     showMenu = false
+                                    showSubtaskDialog = true
                                 },
                                 leadingIcon = {
                                     Icon(
@@ -3736,6 +3797,63 @@ fun TaskCard(
                 }
             }
 
+            // Subtasks section (similar pattern to attachments)
+            if (task.subtasks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Collapsible header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { subtasksExpanded = !subtasksExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (subtasksExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = if (subtasksExpanded) "Collapse Subtasks" else "Expand Subtasks",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "Subtasks",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Subtasks content
+                    AnimatedVisibility(visible = subtasksExpanded) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            task.subtasks.forEach { subtask ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 24.dp, top = 4.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = subtask,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             val hasAttachments = task.imagePaths.isNotEmpty() || task.filePaths.isNotEmpty()
             var attachmentsExpanded by remember { mutableStateOf(false) }
@@ -4614,6 +4732,10 @@ fun BackupScreen(
                         put("filePaths", JSONArray().apply {
                             task.filePaths.forEach { put(it) }
                         })
+                        // Add subtasks as array
+                        put("subtasks", JSONArray().apply {
+                            task.subtasks.forEach { put(it) }
+                        })
                     })
                 }
                 put("tasks", tasksArray)
@@ -5120,28 +5242,45 @@ fun RestoreScreen(
                     for (i in 0 until tasksArray.length()) {
                         val taskObj = tasksArray.getJSONObject(i)
                         val isCompleted = taskObj.optBoolean("completed", false)
-                        if (isCompleted) completedTaskCount++
                         
-                        // Extract image paths
-                        val imagePathsArray = taskObj.optJSONArray("imagePaths") ?: JSONArray()
+                        // Process and update paths for attachments
                         val imagePaths = mutableListOf<String>()
-                        for (j in 0 until imagePathsArray.length()) {
-                            val originalPath = imagePathsArray.getString(j)
-                            val fileName = originalPath.substringAfterLast('/')
-                            // Use the new path if the file was restored
-                            val newPath = restoredFiles[fileName] ?: originalPath
-                            imagePaths.add(newPath)
+                        val imagePathsArray = taskObj.optJSONArray("imagePaths")
+                        if (imagePathsArray != null) {
+                            for (j in 0 until imagePathsArray.length()) {
+                                val originalPath = imagePathsArray.getString(j)
+                                val fileName = originalPath.substringAfterLast('/')
+                                val updatedPath = restoredFiles[fileName]
+                                if (updatedPath != null) {
+                                    imagePaths.add(updatedPath)
+                                }
+                            }
                         }
                         
-                        // Extract file paths
-                        val filePathsArray = taskObj.optJSONArray("filePaths") ?: JSONArray()
                         val filePaths = mutableListOf<String>()
-                        for (j in 0 until filePathsArray.length()) {
-                            val originalPath = filePathsArray.getString(j)
-                            val fileName = originalPath.substringAfterLast('/')
-                            // Use the new path if the file was restored
-                            val newPath = restoredFiles[fileName] ?: originalPath
-                            filePaths.add(newPath)
+                        val filePathsArray = taskObj.optJSONArray("filePaths")
+                        if (filePathsArray != null) {
+                            for (j in 0 until filePathsArray.length()) {
+                                val originalPath = filePathsArray.getString(j)
+                                val fileName = originalPath.substringAfterLast('/')
+                                val updatedPath = restoredFiles[fileName]
+                                if (updatedPath != null) {
+                                    filePaths.add(updatedPath)
+                                }
+                            }
+                        }
+                        
+                        // Process subtasks
+                        val subtasks = mutableListOf<String>()
+                        val subtasksArray = taskObj.optJSONArray("subtasks")
+                        if (subtasksArray != null) {
+                            for (j in 0 until subtasksArray.length()) {
+                                subtasks.add(subtasksArray.getString(j))
+                            }
+                        }
+                        
+                        if (isCompleted) {
+                            completedTaskCount++
                         }
                         
                         taskEntities.add(
@@ -5157,7 +5296,8 @@ fun RestoreScreen(
                                 trackingStartTime = taskObj.optLong("trackingStartTime", 0),
                                 completed = isCompleted,
                                 imagePaths = imagePaths,
-                                filePaths = filePaths
+                                filePaths = filePaths,
+                                subtasks = subtasks
                             )
                         )
                     }
