@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 import androidx.room.TypeConverters
 
 @Entity(tableName = "tasks")
-@TypeConverters(StringListConverter::class)
+@TypeConverters(StringListConverter::class, IntListConverter::class)
 data class TaskEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
@@ -20,5 +20,6 @@ data class TaskEntity(
     val completed: Boolean = false,
     val imagePaths: List<String> = emptyList(),
     val filePaths: List<String> = emptyList(),
-    val subtasks: List<String> = emptyList()
+    val subtasks: List<String> = emptyList(),
+    val completedSubtasks: List<Int> = emptyList()
 )

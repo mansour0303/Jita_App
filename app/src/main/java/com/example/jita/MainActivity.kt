@@ -234,7 +234,8 @@ fun Task.toTaskEntity(): TaskEntity {
         completed = this.completed,  // Add completed flag
         imagePaths = this.imagePaths,
         filePaths = this.filePaths,
-        subtasks = this.subtasks
+        subtasks = this.subtasks,
+        completedSubtasks = this.completedSubtasks
     )
 }
 
@@ -319,7 +320,8 @@ class MainActivity : ComponentActivity() {
                         completed = entity.completed,  // Add completed flag
                         imagePaths = entity.imagePaths,
                         filePaths = entity.filePaths,
-                        subtasks = entity.subtasks
+                        subtasks = entity.subtasks,
+                        completedSubtasks = entity.completedSubtasks
                     )
                 }.toMutableStateList()
             }
@@ -3451,7 +3453,8 @@ data class Task(
     val completed: Boolean = false,
     val imagePaths: List<String> = emptyList(),  // Changed from single path to list
     val filePaths: List<String> = emptyList(),    // Changed from single path to list
-    val subtasks: List<String> = emptyList()     // Added subtasks as a list of strings
+    val subtasks: List<String> = emptyList(),     // Added subtasks as a list of strings
+    val completedSubtasks: List<Int> = emptyList() // Added to track which subtasks are completed by their index
 )
 
 // Task priority enum
@@ -3647,7 +3650,19 @@ fun TaskCard(
                         val updatedSubtasks = task.subtasks.toMutableList().apply {
                             removeAt(index)
                         }
-                        val updatedTask = task.copy(subtasks = updatedSubtasks)
+                        
+                        // Update the completedSubtasks list to account for the removed subtask
+                        // We need to:
+                        // 1. Remove the index of the deleted subtask if it was completed
+                        // 2. Decrement indices greater than the deleted index
+                        val updatedCompletedSubtasks = task.completedSubtasks
+                            .filter { it != index } // Remove this index if it exists
+                            .map { if (it > index) it - 1 else it } // Decrement higher indices
+                        
+                        val updatedTask = task.copy(
+                            subtasks = updatedSubtasks,
+                            completedSubtasks = updatedCompletedSubtasks
+                        )
                         onUpdateSubtasks(updatedTask)
                         showDeleteSubtaskDialog = false
                         subtaskToDelete = null
@@ -3698,6 +3713,8 @@ fun TaskCard(
                             val updatedSubtasks = task.subtasks.toMutableList().apply {
                                 set(index, editedSubtaskName)
                             }
+                            // The completedSubtasks list doesn't need to change
+                            // since we're only updating the name, not the index
                             val updatedTask = task.copy(subtasks = updatedSubtasks)
                             onUpdateSubtasks(updatedTask)
                             showEditSubtaskDialog = false
@@ -3936,20 +3953,44 @@ fun TaskCard(
                                         .padding(start = 24.dp, top = 4.dp, bottom = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    val subtaskChecked = remember { mutableStateOf(false) }
+                                    // Check if this subtask's index is in the completed list
+                                    val isSubtaskCompleted = index in task.completedSubtasks
+                                    val subtaskChecked = remember { mutableStateOf(isSubtaskCompleted) }
+                                    
                                     Checkbox(
                                         checked = subtaskChecked.value,
                                         onCheckedChange = { isChecked ->
                                             subtaskChecked.value = isChecked
-                                            // Additional logic to handle checked state can be added here
+                                            
+                                            // Update the task with the new completed subtasks list
+                                            val updatedCompletedSubtasks = if (isChecked) {
+                                                // Add this index if not already in the list
+                                                if (index in task.completedSubtasks) {
+                                                    task.completedSubtasks
+                                                } else {
+                                                    task.completedSubtasks + index
+                                                }
+                                            } else {
+                                                // Remove this index if it's in the list
+                                                task.completedSubtasks.filter { it != index }
+                                            }
+                                            
+                                            // Create updated task with the new completedSubtasks list
+                                            val updatedTask = task.copy(completedSubtasks = updatedCompletedSubtasks)
+                                            
+                                            // Save the updated task
+                                            onUpdateSubtasks(updatedTask)
                                         },
                                         modifier = Modifier.size(20.dp)
                                     )
+                                    
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = subtask,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        // Apply strikethrough if the subtask is completed
+                                        textDecoration = if (subtaskChecked.value) TextDecoration.LineThrough else TextDecoration.None,
                                         modifier = Modifier
                                             .weight(1f)
                                             .clickable {

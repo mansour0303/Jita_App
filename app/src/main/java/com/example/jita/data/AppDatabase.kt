@@ -16,10 +16,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FolderEntity::class,
         ReminderEntity::class
     ],
-    version = 12,  // Increment version number from 11 to 12
+    version = 13,  // Increment version number from 12 to 13
     exportSchema = false
 )
-@TypeConverters(Converters::class, StringListConverter::class)
+@TypeConverters(Converters::class, StringListConverter::class, IntListConverter::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun listNameDao(): ListNameDao
@@ -34,6 +34,14 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        // Migration from 12 to 13 - Add completedSubtasks column to tasks table
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add completedSubtasks column to tasks table
+                database.execSQL("ALTER TABLE tasks ADD COLUMN completedSubtasks TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
         // Migration from 11 to 12 - Add subtasks column to tasks table
         private val MIGRATION_11_12 = object : Migration(11, 12) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -42,8 +50,8 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
         
-        // Direct migration from version 2 to 12
-        private val MIGRATION_2_12 = object : Migration(2, 12) {
+        // Direct migration from version 2 to 13
+        private val MIGRATION_2_13 = object : Migration(2, 13) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 // Create a new tasks table with all the required columns
                 database.execSQL(
@@ -61,7 +69,8 @@ abstract class AppDatabase : RoomDatabase() {
                         completed INTEGER NOT NULL DEFAULT 0,
                         imagePaths TEXT NOT NULL DEFAULT '[]',
                         filePaths TEXT NOT NULL DEFAULT '[]',
-                        subtasks TEXT NOT NULL DEFAULT '[]'
+                        subtasks TEXT NOT NULL DEFAULT '[]',
+                        completedSubtasks TEXT NOT NULL DEFAULT '[]'
                     )
                     """
                 )
@@ -161,8 +170,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                // Use the direct migration from 2 to 12 instead of all intermediate migrations
-                .addMigrations(MIGRATION_2_12)
+                // Use the migrations
+                .addMigrations(MIGRATION_2_13, MIGRATION_12_13)
                 .fallbackToDestructiveMigration() // Add this to handle severe migration issues
                 .build()
                 INSTANCE = instance

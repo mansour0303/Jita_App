@@ -26,7 +26,8 @@ fun TaskEntity.toTask(): Task {
         completed = completed,
         imagePaths = imagePaths,
         filePaths = filePaths,
-        subtasks = subtasks
+        subtasks = subtasks,
+        completedSubtasks = completedSubtasks
     )
 }
 
@@ -47,6 +48,7 @@ fun Task.toTaskEntity(): TaskEntity {
         completed = completed,
         imagePaths = imagePaths,
         filePaths = filePaths,
-        subtasks = subtasks
+        subtasks = subtasks,
+        completedSubtasks = completedSubtasks
     )
 } 
