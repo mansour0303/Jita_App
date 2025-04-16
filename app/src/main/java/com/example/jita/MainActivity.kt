@@ -3526,6 +3526,11 @@ fun TaskCard(
     // Variables for subtask deletion confirmation
     var showDeleteSubtaskDialog by remember { mutableStateOf(false) }
     var subtaskToDelete by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    
+    // Variables for subtask editing
+    var showEditSubtaskDialog by remember { mutableStateOf(false) }
+    var subtaskToEdit by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    var editedSubtaskName by remember { mutableStateOf("") }
 
     // Use StartActivityForResult to have more control over the save intent
     val downloadLauncher = rememberLauncherForActivityResult(
@@ -3656,6 +3661,58 @@ fun TaskCard(
                     onClick = { 
                         showDeleteSubtaskDialog = false 
                         subtaskToDelete = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Edit Subtask Dialog
+    if (showEditSubtaskDialog && subtaskToEdit != null) {
+        val (index, currentName) = subtaskToEdit!!
+        
+        AlertDialog(
+            onDismissRequest = { 
+                showEditSubtaskDialog = false 
+                subtaskToEdit = null 
+            },
+            title = { Text("Edit Subtask") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editedSubtaskName,
+                        onValueChange = { editedSubtaskName = it },
+                        label = { Text("Subtask Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (editedSubtaskName.isNotBlank()) {
+                            // Update the subtask name
+                            val updatedSubtasks = task.subtasks.toMutableList().apply {
+                                set(index, editedSubtaskName)
+                            }
+                            val updatedTask = task.copy(subtasks = updatedSubtasks)
+                            onUpdateSubtasks(updatedTask)
+                            showEditSubtaskDialog = false
+                            subtaskToEdit = null
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        showEditSubtaskDialog = false 
+                        subtaskToEdit = null 
                     }
                 ) {
                     Text("Cancel")
@@ -3890,7 +3947,14 @@ fun TaskCard(
                                         text = subtask,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                // Prepare for editing
+                                                subtaskToEdit = Pair(index, subtask)
+                                                editedSubtaskName = subtask
+                                                showEditSubtaskDialog = true
+                                            }
                                     )
                                     IconButton(
                                         onClick = {
