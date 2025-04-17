@@ -1731,13 +1731,7 @@ fun MainScreen(
                                 timeLogs.sumOf { it.durationMillis }
                             }
                             
-                            // Header showing total time
-                            Text(
-                                text = "Total time: ${formatDuration(totalTimeForDay)}",
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+
                             
                             // Function to delete a time log and update task time
                             val handleDeleteTimeLog: (TimeLogEntry) -> Unit = { timeLog ->
@@ -2804,12 +2798,13 @@ fun MainScreen(
                                 trackingStartTime = taskToEdit!!.trackingStartTime,
                                 completed = taskToEdit!!.completed,
                                 imagePaths = newTaskImagePaths, // Use new images if selected, otherwise use edited (which might be null now)
-                                filePaths = newTaskFilePaths    // Use new files if selected, otherwise use edited (which might be null now)
+                                filePaths = newTaskFilePaths,   // Use new files if selected, otherwise use edited (which might be null now)
+                                subtasks = taskToEdit!!.subtasks, // Preserve the subtasks
+                                completedSubtasks = taskToEdit!!.completedSubtasks // Preserve the completed subtasks
                             )
 
-                            // Delete the old task and add the updated one
-                            onDeleteTask(taskToEdit!!)
-                            onAddTask(updatedTask)
+                            // Use updateTask instead of delete + add to preserve time log relationships
+                            onUpdateTask(updatedTask)
 
                             showEditTaskDialog = false
                             taskToEdit = null
