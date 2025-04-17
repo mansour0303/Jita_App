@@ -2785,52 +2785,75 @@ fun MainScreen(
 
                             Log.d("EditTask", "Saving task with imagePaths: ${newTaskImagePaths.size}, filePaths: ${newTaskFilePaths.size}")
                             
-                            // Check if date has changed to update time logs
-                            val dateChanged = !isSameDay(taskToEdit!!.dueDate, newTaskDate)
-                            
-                            // Create updated Task object with the same ID
-                            val updatedTask = Task(
-                                id = taskToEdit!!.id, // Keep the same ID
-                                name = newTaskName.trim(),
-                                description = newTaskDescription.trim(),
-                                dueDate = newTaskDate.clone() as Calendar,
-                                priority = newTaskPriority,
-                                list = newTaskList,
-                                trackedTimeMillis = timeMillis, // Use the edited time
-                                isTracking = taskToEdit!!.isTracking,
-                                trackingStartTime = taskToEdit!!.trackingStartTime,
-                                completed = taskToEdit!!.completed,
-                                imagePaths = newTaskImagePaths, // Use new images if selected, otherwise use edited (which might be null now)
-                                filePaths = newTaskFilePaths,   // Use new files if selected, otherwise use edited (which might be null now)
-                                subtasks = taskToEdit!!.subtasks, // Preserve the subtasks
-                                completedSubtasks = taskToEdit!!.completedSubtasks // Preserve the completed subtasks
-                            )
-
-                            // Use updateTask to save the changes
-                            onUpdateTask(updatedTask)
-                            
-                            // If date has changed, update all time logs to the new date
-                            if (dateChanged) {
-                                scope.launch(Dispatchers.IO) {
-                                    val logCount = updateTimeLogsForTaskDateChange(
-                                        timeLogDao,
-                                        taskToEdit!!.id,
-                                        taskToEdit!!.dueDate,
-                                        newTaskDate
-                                    )
-                                    
-                                    // Show a toast on the main thread if logs were moved
-                                    if (logCount > 0) {
-                                        withContext(Dispatchers.Main) {
-                                            val dateFormatter = SimpleDateFormat("MMM d", Locale.getDefault())
-                                            Toast.makeText(
-                                                context,
-                                                "$logCount time logs moved to ${dateFormatter.format(newTaskDate.time)}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                            try {
+                                // Check if date has changed to update time logs
+                                val dateChanged = !isSameDay(taskToEdit!!.dueDate, newTaskDate)
+                                val originalTaskId = taskToEdit!!.id
+                                val originalDate = taskToEdit!!.dueDate.clone() as Calendar
+                                
+                                // Create updated Task object with the same ID
+                                val updatedTask = Task(
+                                    id = originalTaskId, // Keep the same ID
+                                    name = newTaskName.trim(),
+                                    description = newTaskDescription.trim(),
+                                    dueDate = newTaskDate.clone() as Calendar,
+                                    priority = newTaskPriority,
+                                    list = newTaskList,
+                                    trackedTimeMillis = timeMillis, // Use the edited time
+                                    isTracking = taskToEdit!!.isTracking,
+                                    trackingStartTime = taskToEdit!!.trackingStartTime,
+                                    completed = taskToEdit!!.completed,
+                                    imagePaths = newTaskImagePaths, // Use new images if selected
+                                    filePaths = newTaskFilePaths,   // Use new files if selected
+                                    subtasks = taskToEdit!!.subtasks, // Preserve the subtasks
+                                    completedSubtasks = taskToEdit!!.completedSubtasks // Preserve the completed subtasks
+                                )
+    
+                                // First update the task - it's important to do this BEFORE updating time logs
+                                Log.d("EditTask", "Updating task ${updatedTask.id} with ${updatedTask.subtasks.size} subtasks")
+                                onUpdateTask(updatedTask)
+                                
+                                // If date has changed, update all time logs to the new date in a separate operation
+                                if (dateChanged) {
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            val logCount = updateTimeLogsForTaskDateChange(
+                                                timeLogDao,
+                                                originalTaskId,
+                                                originalDate,
+                                                newTaskDate
+                                            )
+                                            
+                                            // Show a toast on the main thread if logs were moved
+                                            if (logCount > 0) {
+                                                withContext(Dispatchers.Main) {
+                                                    val dateFormatter = SimpleDateFormat("MMM d", Locale.getDefault())
+                                                    Toast.makeText(
+                                                        context,
+                                                        "$logCount time logs moved to ${dateFormatter.format(newTaskDate.time)}",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("EditTask", "Error updating time logs for task $originalTaskId", e)
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Error moving time logs: ${e.localizedMessage}",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                         }
                                     }
                                 }
+                            } catch (e: Exception) {
+                                Log.e("EditTask", "Error updating task", e)
+                                Toast.makeText(
+                                    context,
+                                    "Error updating task: ${e.localizedMessage}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
 
                             showEditTaskDialog = false
@@ -6931,24 +6954,113 @@ private suspend fun updateTimeLogsForTaskDateChange(
     oldDate: Calendar,
     newDate: Calendar
 ): Int {
-    // Skip if dates are the same
-    if (isSameDay(oldDate, newDate)) return 0
-    
-    // Get all time logs for this task
-    val timeLogs = timeLogDao.getTimeLogsForTaskAsList(taskId)
-    if (timeLogs.isEmpty()) return 0
-    
-    // Calculate the date difference in milliseconds
-    val dateDifferenceMillis = newDate.timeInMillis - oldDate.timeInMillis
-    
-    // Update each time log by shifting the date component while preserving the time of day
-    timeLogs.forEach { timeLog ->
-        val updatedTimeLog = timeLog.copy(
-            startTime = timeLog.startTime + dateDifferenceMillis,
-            endTime = timeLog.endTime + dateDifferenceMillis
-        )
-        timeLogDao.updateTimeLog(updatedTimeLog)
+    try {
+        // Log operation start for debugging
+        Log.d("TimeLogUpdate", "Starting update for task $taskId: Moving from ${oldDate.time} to ${newDate.time}")
+        
+        // Skip if dates are the same
+        if (isSameDay(oldDate, newDate)) {
+            Log.d("TimeLogUpdate", "Dates are the same, skipping update")
+            return 0
+        }
+        
+        // Get all time logs for this task
+        val timeLogs = timeLogDao.getTimeLogsForTaskAsList(taskId)
+        if (timeLogs.isEmpty()) {
+            Log.d("TimeLogUpdate", "No time logs found for task $taskId")
+            return 0
+        }
+        
+        Log.d("TimeLogUpdate", "Moving ${timeLogs.size} logs for task $taskId")
+        
+        // Create calendars for the date operations to ensure we keep time of day consistent
+        val oldCalendar = Calendar.getInstance()
+        val newCalendar = Calendar.getInstance()
+        
+        // Get date components from the task dates (year, month, day)
+        val oldYear = oldDate.get(Calendar.YEAR)
+        val oldMonth = oldDate.get(Calendar.MONTH)
+        val oldDay = oldDate.get(Calendar.DAY_OF_MONTH)
+        
+        val newYear = newDate.get(Calendar.YEAR)
+        val newMonth = newDate.get(Calendar.MONTH)
+        val newDay = newDate.get(Calendar.DAY_OF_MONTH)
+        
+        var successCount = 0
+        
+        // Process each time log
+        timeLogs.forEach { timeLog ->
+            try {
+                // Extract time of day from start time
+                oldCalendar.timeInMillis = timeLog.startTime
+                val startHour = oldCalendar.get(Calendar.HOUR_OF_DAY)
+                val startMinute = oldCalendar.get(Calendar.MINUTE)
+                val startSecond = oldCalendar.get(Calendar.SECOND)
+                val startMillis = oldCalendar.get(Calendar.MILLISECOND)
+                
+                // Create new start time with the new date but same time of day
+                newCalendar.clear()
+                newCalendar.set(newYear, newMonth, newDay, startHour, startMinute, startSecond)
+                newCalendar.set(Calendar.MILLISECOND, startMillis)
+                val newStartTime = newCalendar.timeInMillis
+                
+                // Extract time of day from end time
+                oldCalendar.timeInMillis = timeLog.endTime
+                val endHour = oldCalendar.get(Calendar.HOUR_OF_DAY)
+                val endMinute = oldCalendar.get(Calendar.MINUTE)
+                val endSecond = oldCalendar.get(Calendar.SECOND)
+                val endMillis = oldCalendar.get(Calendar.MILLISECOND)
+                
+                // Create new end time with the new date but same time of day
+                newCalendar.clear()
+                newCalendar.set(newYear, newMonth, newDay, endHour, endMinute, endSecond)
+                newCalendar.set(Calendar.MILLISECOND, endMillis)
+                val newEndTime = newCalendar.timeInMillis
+                
+                // Handle case where log spans multiple days (end time should be later than start time)
+                val duration = timeLog.endTime - timeLog.startTime
+                val newDuration = newEndTime - newStartTime
+                
+                if (duration != newDuration) {
+                    // If durations don't match after the date change, adjust the end time accordingly
+                    // This handles cases where the log crossed midnight
+                    val adjustedNewEndTime = newStartTime + duration
+                    
+                    Log.d("TimeLogUpdate", "Updating log ${timeLog.id} with multi-day adjustment: " +
+                        "start=${formatTimeWithDate(newStartTime)}, end=${formatTimeWithDate(adjustedNewEndTime)}")
+                    
+                    val updatedTimeLog = timeLog.copy(
+                        startTime = newStartTime,
+                        endTime = adjustedNewEndTime,
+                        // Keep the same duration to ensure consistency
+                        durationMillis = timeLog.durationMillis
+                    )
+                    timeLogDao.updateTimeLog(updatedTimeLog)
+                } else {
+                    // Standard case - just update both timestamps
+                    Log.d("TimeLogUpdate", "Updating log ${timeLog.id}: " +
+                        "start=${formatTimeWithDate(newStartTime)}, end=${formatTimeWithDate(newEndTime)}")
+                    
+                    val updatedTimeLog = timeLog.copy(
+                        startTime = newStartTime,
+                        endTime = newEndTime,
+                        // Keep the same duration to ensure consistency
+                        durationMillis = timeLog.durationMillis
+                    )
+                    timeLogDao.updateTimeLog(updatedTimeLog)
+                }
+                
+                successCount++
+            } catch (e: Exception) {
+                // Handle individual log update failures
+                Log.e("TimeLogUpdate", "Error updating time log ${timeLog.id} for task $taskId", e)
+            }
+        }
+        
+        Log.d("TimeLogUpdate", "Successfully updated $successCount/${timeLogs.size} time logs for task $taskId")
+        return successCount
+    } catch (e: Exception) {
+        Log.e("TimeLogUpdate", "Error in updateTimeLogsForTaskDateChange for task $taskId", e)
+        return 0
     }
-    
-    return timeLogs.size
 }
