@@ -41,8 +41,10 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private val viewModel: AlarmViewModel by viewModels {
+        val database = AppDatabase.getDatabase(applicationContext)
         AlarmViewModelFactory(
-            AppDatabase.getDatabase(applicationContext).reminderDao(),
+            database.reminderDao(),
+            database.taskDao(),
             intent.getIntExtra(EXTRA_REMINDER_ID, -1)
         )
     }

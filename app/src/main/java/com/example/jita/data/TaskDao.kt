@@ -15,6 +15,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks ORDER BY dueDate ASC")
     fun getAllTasks(): Flow<List<TaskEntity>>
 
+    // Get a simple list of all tasks (not Flow) for use in the alarm
+    @Query("SELECT * FROM tasks ORDER BY dueDate ASC")
+    suspend fun getAllTasksAsList(): List<TaskEntity>
+
     // Get tasks for a specific date range (start/end of day)
     @Query("SELECT * FROM tasks WHERE dueDate >= :startOfDay AND dueDate <= :endOfDay ORDER BY priority ASC, name ASC")
     fun getTasksForDate(startOfDay: Long, endOfDay: Long): Flow<List<TaskEntity>>

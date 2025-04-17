@@ -18,11 +18,13 @@ import androidx.core.app.ServiceCompat
 import com.example.jita.MainActivity
 import com.example.jita.R
 import com.example.jita.Task
+import com.example.jita.TaskPriority
 import com.example.jita.data.AppDatabase
 import com.example.jita.model.Reminder
 import com.example.jita.model.toReminder
 import kotlinx.coroutines.*
 import java.io.IOException
+import java.util.*
 
 class AlarmService : Service() {
     private val TAG = "AlarmService"
@@ -116,9 +118,52 @@ class AlarmService : Service() {
     }
 
     private suspend fun loadAttachedTasks(reminder: Reminder): List<Task> {
-        // Load tasks from TaskDao here...
-        // This is a placeholder - you'll need to implement the actual task loading logic
-        return emptyList()
+        // If there are no attached tasks, return an empty list
+        if (reminder.attachedTaskIds.isEmpty()) {
+            return emptyList()
+        }
+        
+        try {
+            val taskDao = AppDatabase.getDatabase(applicationContext).taskDao()
+            val allTasks = taskDao.getAllTasksAsList()
+            
+            // Filter out the tasks that are in the reminder's attachedTaskIds
+            return reminder.attachedTaskIds.mapNotNull { taskId ->
+                val taskEntity = allTasks.find { it.id == taskId }
+                if (taskEntity != null) {
+                    // Convert TaskEntity to Task domain model
+                    val calendar = Calendar.getInstance().apply {
+                        timeInMillis = taskEntity.dueDate
+                    }
+                    
+                    Task(
+                        id = taskEntity.id,
+                        name = taskEntity.name,
+                        description = taskEntity.description,
+                        dueDate = calendar,
+                        priority = try {
+                            TaskPriority.valueOf(taskEntity.priority)
+                        } catch (e: Exception) {
+                            TaskPriority.MEDIUM
+                        },
+                        list = taskEntity.list,
+                        trackedTimeMillis = taskEntity.trackedTimeMillis,
+                        isTracking = taskEntity.isTracking,
+                        trackingStartTime = taskEntity.trackingStartTime,
+                        completed = taskEntity.completed,
+                        imagePaths = taskEntity.imagePaths,
+                        filePaths = taskEntity.filePaths,
+                        subtasks = taskEntity.subtasks,
+                        completedSubtasks = taskEntity.completedSubtasks
+                    )
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading attached tasks", e)
+            return emptyList()
+        }
     }
 
     private fun startAlarm(reminder: Reminder) {

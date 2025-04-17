@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.jita.Task
 import com.example.jita.TaskPriority
 import com.example.jita.data.ReminderDao
+import com.example.jita.data.TaskDao
 import com.example.jita.model.Reminder
 import com.example.jita.model.toReminder
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ data class ReminderWithTasks(
 
 class AlarmViewModel(
     private val reminderDao: ReminderDao,
+    private val taskDao: TaskDao,
     private val reminderId: Int
 ) : ViewModel() {
 
@@ -38,23 +40,50 @@ class AlarmViewModel(
                 if (reminderEntity != null) {
                     val reminder = reminderEntity.toReminder()
                     
-                    // TODO: In a real implementation, get the tasks from TaskDao
-                    // For now, we'll create empty placeholder tasks with the IDs
-                    val placeholderTasks = reminder.attachedTaskIds.map { taskId ->
-                        Task(
-                            id = taskId,
-                            name = "Task #$taskId",
-                            description = "This is a placeholder task",
-                            dueDate = Calendar.getInstance(),
-                            completed = false,
-                            priority = TaskPriority.MEDIUM,
-                            list = null
-                        )
+                    // Load the actual tasks from TaskDao
+                    val tasks = mutableListOf<Task>()
+                    if (reminder.attachedTaskIds.isNotEmpty()) {
+                        // Get all tasks from database
+                        val allTasks = taskDao.getAllTasksAsList()
+                        
+                        // Filter the tasks that are attached to this reminder
+                        for (taskId in reminder.attachedTaskIds) {
+                            val task = allTasks.find { it.id == taskId }
+                            if (task != null) {
+                                // Convert TaskEntity to Task domain model
+                                val calendar = Calendar.getInstance().apply {
+                                    timeInMillis = task.dueDate
+                                }
+                                
+                                tasks.add(
+                                    Task(
+                                        id = task.id,
+                                        name = task.name,
+                                        description = task.description,
+                                        dueDate = calendar,
+                                        priority = try {
+                                            TaskPriority.valueOf(task.priority)
+                                        } catch (e: Exception) {
+                                            TaskPriority.MEDIUM
+                                        },
+                                        list = task.list,
+                                        trackedTimeMillis = task.trackedTimeMillis,
+                                        isTracking = task.isTracking,
+                                        trackingStartTime = task.trackingStartTime,
+                                        completed = task.completed,
+                                        imagePaths = task.imagePaths,
+                                        filePaths = task.filePaths,
+                                        subtasks = task.subtasks,
+                                        completedSubtasks = task.completedSubtasks
+                                    )
+                                )
+                            }
+                        }
                     }
                     
                     _reminderWithTasks.value = ReminderWithTasks(
                         reminder = reminder,
-                        tasks = placeholderTasks
+                        tasks = tasks
                     )
                 }
             } catch (e: Exception) {
@@ -75,13 +104,14 @@ class AlarmViewModel(
 
 class AlarmViewModelFactory(
     private val reminderDao: ReminderDao,
+    private val taskDao: TaskDao,
     private val reminderId: Int
 ) : ViewModelProvider.Factory {
     
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AlarmViewModel::class.java)) {
-            return AlarmViewModel(reminderDao, reminderId) as T
+            return AlarmViewModel(reminderDao, taskDao, reminderId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
