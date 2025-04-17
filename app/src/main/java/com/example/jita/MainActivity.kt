@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -194,6 +195,8 @@ import java.util.concurrent.TimeUnit
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.Divider
+import androidx.compose.material.icons.filled.Folder
 
 
 object AppDestinations {
@@ -1723,28 +1726,61 @@ fun MainScreen(
                                 tasks.associate { it.id to it.name }
                             }
                             
-                            if (timeLogs.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(
-                                            "No time tracking data for this day.",
-                                            color = MaterialTheme.colorScheme.onBackground,
-                                            textAlign = TextAlign.Center
+                            // Calculate total time for the day
+                            val totalTimeForDay = remember(timeLogs) {
+                                timeLogs.sumOf { it.durationMillis }
+                            }
+                            
+                            // Header showing total time
+                            Text(
+                                text = "Total time: ${formatDuration(totalTimeForDay)}",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            // Function to delete a time log and update task time
+                            val handleDeleteTimeLog: (TimeLogEntry) -> Unit = { timeLog ->
+                                scope.launch(Dispatchers.IO) {
+                                    // 1. Find the associated task
+                                    val taskToUpdate = tasks.find { it.id == timeLog.taskId }
+                                    
+                                    // 2. Delete the time log entry
+                                    val timeLogEntity = TimeLogMapper.toEntity(timeLog)
+                                    timeLogDao.deleteTimeLog(timeLogEntity)
+                                    
+                                    // 3. Update the task's tracked time by subtracting the deleted log's duration
+                                    taskToUpdate?.let { task ->
+                                        val updatedTask = task.copy(
+                                            trackedTimeMillis = (task.trackedTimeMillis - timeLog.durationMillis).coerceAtLeast(0)
                                         )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        GifImage(
-                                            modifier = Modifier.size(135.dp),
-                                            drawableResId = R.drawable.bun
-                                        )
+                                        // Use the onUpdateTask callback instead of directly accessing taskDao
+                                        onUpdateTask(updatedTask)
                                     }
+                                }
+                            }
+                            
+                            // Display the time logs for the day or a message if none
+                            if (timeLogs.isEmpty()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.HourglassEmpty,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No time logs for this day",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
                                 }
                             } else {
                                 LazyColumn(
@@ -1755,27 +1791,18 @@ fun MainScreen(
                                     contentPadding = PaddingValues(bottom = 8.dp)
                                 ) {
                                     items(timeLogs, key = { log -> log.id }) { log ->
+                                        // Find the task for this log to get description and list
+                                        val task = tasks.find { it.id == log.taskId }
+                                        
                                         TaskTimeLogItem(
                                             timeLog = log,
                                             taskName = taskNameMap[log.taskId] ?: "Unknown Task",
+                                            taskDescription = task?.description ?: "",
+                                            taskListName = task?.list,
                                             onClick = {
-                                                // Find the task for this log
-                                                val task = tasks.find { it.id == log.taskId }
-                                                if (task != null) {
-                                                    // Set the task to edit and show edit dialog
-                                                    taskToEdit = task
-                                                    // Pre-fill the edit form with task data
-                                                    newTaskName = task.name
-                                                    newTaskDescription = task.description
-                                                    newTaskDate = task.dueDate.clone() as Calendar
-                                                    newTaskPriority = task.priority
-                                                    newTaskList = task.list
-                                                    // Initialize attachment paths with current task data
-                                                    newTaskImagePaths = task.imagePaths
-                                                    newTaskFilePaths = task.filePaths
-                                                    showEditTaskDialog = true
-                                                }
-                                            }
+                                                // If needed, handle the click (e.g., navigate to task details)
+                                            },
+                                            onDeleteLog = handleDeleteTimeLog
                                         )
                                     }
                                 }
@@ -6675,11 +6702,17 @@ private fun formatDuration(durationMillis: Long): String {
 fun TaskTimeLogItem(
     timeLog: TimeLogEntry,
     taskName: String,
-    onClick: () -> Unit = {}  // Make onClick optional with empty default
+    taskDescription: String = "", // Add description parameter with default empty value
+    taskListName: String? = null, // Add list name parameter with default null value
+    onClick: () -> Unit = {},
+    onDeleteLog: (TimeLogEntry) -> Unit = {}
 ) {
     val startTime = formatTimeOnly(timeLog.startTime)
     val endTime = formatTimeOnly(timeLog.endTime)
     val duration = formatDuration(timeLog.durationMillis)
+    
+    // For delete confirmation dialog
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
     
     // Determine background color and icon based on log type
     val (backgroundColor, icon, label) = when (timeLog.type) {
@@ -6704,11 +6737,36 @@ fun TaskTimeLogItem(
             "Long Break"
         )
     }
+
+    // Show delete confirmation dialog if requested
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Time Log") },
+            text = { Text("Are you sure you want to delete this time log? This will reduce the task's tracked time.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteLog(timeLog)
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = backgroundColor,
             contentColor = MaterialTheme.colorScheme.onSurface
@@ -6716,65 +6774,123 @@ fun TaskTimeLogItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Icon
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(32.dp)
-                    .padding(end = 12.dp)
-            )
-            
-            // Content
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header row with task name and delete button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Task name
+                Text(
+                    text = taskName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                // Delete button
+                IconButton(
+                    onClick = { showDeleteConfirmation = true },
+                    modifier = Modifier.size(36.dp)
                 ) {
-                    // Task name
-                    Text(
-                        text = taskName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    // Duration
-                    Text(
-                        text = duration,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Time Log",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                     )
                 }
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
+            }
+            
+            // Duration with icon
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccessTime,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = duration,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Description if available
+            if (taskDescription.isNotBlank()) {
+                Text(
+                    text = taskDescription,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            
+            // List name if available
+            if (!taskListName.isNullOrBlank()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    // Log type
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = taskListName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
+                }
+            }
+            
+            Divider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+            )
+            
+            // Time range
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Log type
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = label,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    
-                    // Time range
-                    Text(
-                        text = "$startTime - $endTime",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
+                
+                // Time range
+                Text(
+                    text = "$startTime - $endTime",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
