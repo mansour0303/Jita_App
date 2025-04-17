@@ -187,6 +187,13 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.icons.filled.List
+import com.example.jita.data.TimeLogDao
+import com.example.jita.data.TimeLogEntry
+import com.example.jita.data.TimeLogMapper
+import java.util.concurrent.TimeUnit
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Coffee
+import androidx.compose.material.icons.filled.Work
 
 
 object AppDestinations {
@@ -201,6 +208,7 @@ object AppDestinations {
     const val REMINDERS_SCREEN = "reminders"
     const val REMINDER_SETTINGS_SCREEN = "reminder_settings"
     const val REMINDER_EDITOR_SCREEN = "reminder_editor/{reminderId}"
+    const val TIME_LOG_SCREEN = "time_log"
     
     // Helper functions for parameterized navigation
     fun createNoteEditorRoute(noteId: Int = -1): String {
@@ -279,6 +287,7 @@ class MainActivity : ComponentActivity() {
         val noteDao = database.noteDao()  // Add this line
         val folderDao = database.folderDao()  // Add this line
         val reminderDao = database.reminderDao()  // Add this line
+        val timeLogDao = database.timeLogDao()  // Add this line
 
         // Request necessary permissions for alarms to work in background
         requestPermissions()
@@ -428,7 +437,8 @@ class MainActivity : ComponentActivity() {
                             isSameDay = isSameDay, // Pass date comparison logic
                             onAddTask = onAddTask,
                             onDeleteTask = onDeleteTask,
-                            onUpdateTask = onUpdateTask
+                            onUpdateTask = onUpdateTask,
+                            timeLogDao = timeLogDao
                         )
                     }
                     composable(AppDestinations.LISTS_SCREEN) {
@@ -449,7 +459,8 @@ class MainActivity : ComponentActivity() {
                             selectedDate = selectedDate, // Pass shared selected date
                             onDateSelected = onDateSelected, // Pass date selection callback
                             isSameDay = isSameDay, // Pass date comparison logic
-                            onUpdateTask = onUpdateTask // Pass task update callback
+                            onUpdateTask = onUpdateTask, // Pass task update callback
+                            timeLogDao = timeLogDao
                         )
                     }
                     // Add composable for the new Statistics screen
@@ -542,6 +553,14 @@ class MainActivity : ComponentActivity() {
                             noteId = noteId,
                             folderId = currentFolderId,
                             taskDao = taskDao // Add taskDao parameter
+                        )
+                    }
+                    // Add this TimeLogScreen composable function
+                    composable(AppDestinations.TIME_LOG_SCREEN) {
+                        TimeLogScreen(
+                            navController = navController,
+                            timeLogDao = timeLogDao,
+                            taskDao = taskDao
                         )
                     }
                 }
@@ -1062,12 +1081,13 @@ fun MainScreen(
     navController: NavHostController,
     listNames: List<String>,
     tasks: List<Task>,
-    selectedDate: Calendar, // Receive selectedDate
-    onDateSelected: (Calendar) -> Unit, // Receive callback
-    isSameDay: (Calendar, Calendar) -> Boolean, // Receive comparison logic
+    selectedDate: Calendar,
+    onDateSelected: (Calendar) -> Unit,
+    isSameDay: (Calendar, Calendar) -> Boolean,
     onAddTask: (Task) -> Unit,
     onDeleteTask: (Task) -> Unit,
-    onUpdateTask: (Task) -> Unit
+    onUpdateTask: (Task) -> Unit,
+    timeLogDao: TimeLogDao
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -1601,15 +1621,30 @@ fun MainScreen(
                                                 // Add more detailed logging
                                                 Log.d("MainScreen", "Tracking toggled for task: ${task.name}, isTracking: $isTracking")
 
+                                                val currentTime = System.currentTimeMillis()
                                                 val updatedTask = if (isTracking) {
                                                     // Start tracking
                                                     task.copy(
                                                         isTracking = true,
-                                                        trackingStartTime = System.currentTimeMillis()
+                                                        trackingStartTime = currentTime
                                                     )
                                                 } else {
                                                     // Stop tracking and update total time
-                                                    val elapsedTime = System.currentTimeMillis() - task.trackingStartTime
+                                                    val elapsedTime = currentTime - task.trackingStartTime
+                                                    
+                                                    // Create a time log entry for this tracking session
+                                                    scope.launch(Dispatchers.IO) {
+                                                        val timeLogEntry = TimeLogEntry(
+                                                            taskId = task.id,
+                                                            type = TimeLogEntry.LogType.TASK_TIMER,
+                                                            startTime = task.trackingStartTime,
+                                                            endTime = currentTime,
+                                                            durationMillis = elapsedTime
+                                                        )
+                                                        // Save the time log entry to the database
+                                                        timeLogDao.insertTimeLog(TimeLogMapper.toEntity(timeLogEntry))
+                                                    }
+                                                    
                                                     task.copy(
                                                         isTracking = false,
                                                         trackedTimeMillis = task.trackedTimeMillis + elapsedTime
@@ -1658,14 +1693,37 @@ fun MainScreen(
                                 fontWeight = FontWeight.Medium
                             )
                             
-                            // Get tasks with tracked time for the selected date
-                            val trackedTasks = remember(tasks, selectedDate) {
-                                tasks
-                                    .filter { task -> isSameDay(task.dueDate, selectedDate) && task.trackedTimeMillis > 0 }
-                                    .sortedByDescending { it.trackedTimeMillis }
+                            // Get time logs for the selected date
+                            val startOfDay = Calendar.getInstance().apply {
+                                timeInMillis = selectedDate.timeInMillis
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }.timeInMillis
+                            
+                            val endOfDay = Calendar.getInstance().apply {
+                                timeInMillis = selectedDate.timeInMillis
+                                set(Calendar.HOUR_OF_DAY, 23)
+                                set(Calendar.MINUTE, 59)
+                                set(Calendar.SECOND, 59)
+                                set(Calendar.MILLISECOND, 999)
+                            }.timeInMillis
+                            
+                            val timeLogsForDate = timeLogDao.getTimeLogsInTimeRange(startOfDay, endOfDay)
+                                .collectAsState(initial = emptyList()).value
+                            
+                            // Convert entities to domain objects
+                            val timeLogs = remember(timeLogsForDate) {
+                                TimeLogMapper.fromEntities(timeLogsForDate)
                             }
                             
-                            if (trackedTasks.isEmpty()) {
+                            // Create a map of task IDs to task names for display
+                            val taskNameMap = remember(tasks) {
+                                tasks.associate { it.id to it.name }
+                            }
+                            
+                            if (timeLogs.isEmpty()) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1696,22 +1754,27 @@ fun MainScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                     contentPadding = PaddingValues(bottom = 8.dp)
                                 ) {
-                                    items(trackedTasks, key = { task -> task.id }) { task ->
-                                        TimeLogItem(
-                                            task = task,
+                                    items(timeLogs, key = { log -> log.id }) { log ->
+                                        TaskTimeLogItem(
+                                            timeLog = log,
+                                            taskName = taskNameMap[log.taskId] ?: "Unknown Task",
                                             onClick = {
-                                                // Set the task to edit and show edit dialog
-                                                taskToEdit = task
-                                                // Pre-fill the edit form with task data
-                                                newTaskName = task.name
-                                                newTaskDescription = task.description
-                                                newTaskDate = task.dueDate.clone() as Calendar
-                                                newTaskPriority = task.priority
-                                                newTaskList = task.list
-                                                // Initialize attachment paths with current task data
-                                                newTaskImagePaths = task.imagePaths
-                                                newTaskFilePaths = task.filePaths
-                                                showEditTaskDialog = true
+                                                // Find the task for this log
+                                                val task = tasks.find { it.id == log.taskId }
+                                                if (task != null) {
+                                                    // Set the task to edit and show edit dialog
+                                                    taskToEdit = task
+                                                    // Pre-fill the edit form with task data
+                                                    newTaskName = task.name
+                                                    newTaskDescription = task.description
+                                                    newTaskDate = task.dueDate.clone() as Calendar
+                                                    newTaskPriority = task.priority
+                                                    newTaskList = task.list
+                                                    // Initialize attachment paths with current task data
+                                                    newTaskImagePaths = task.imagePaths
+                                                    newTaskFilePaths = task.filePaths
+                                                    showEditTaskDialog = true
+                                                }
                                             }
                                         )
                                     }
@@ -2858,7 +2921,7 @@ fun MainScreen(
 }
 
 @Composable
-fun TimeLogItem(
+fun TaskLogItem(
     task: Task,
     onClick: () -> Unit
 ) {
@@ -2955,8 +3018,12 @@ fun PomodoroScreen(
     selectedDate: Calendar,
     onDateSelected: (Calendar) -> Unit,
     isSameDay: (Calendar, Calendar) -> Boolean,
-    onUpdateTask: (Task) -> Unit
+    onUpdateTask: (Task) -> Unit,
+    timeLogDao: TimeLogDao
 ) {
+    // Add coroutine scope
+    val scope = rememberCoroutineScope()
+    
     // --- Pomodoro State ---
     var workDurationMinutes by rememberSaveable { mutableIntStateOf(25) }
     var shortBreakDurationMinutes by rememberSaveable { mutableIntStateOf(5) }
@@ -2995,6 +3062,15 @@ fun PomodoroScreen(
             // Timer finished
             timerRunning = false
 
+            // Get the session start time (current time minus the full duration of this pomodoro state)
+            val currentTime = System.currentTimeMillis()
+            val sessionStartTime = when (pomodoroState) {
+                PomodoroMode.Work -> currentTime - (workDurationMinutes * 60 * 1000L)
+                PomodoroMode.ShortBreak -> currentTime - (shortBreakDurationMinutes * 60 * 1000L)
+                PomodoroMode.LongBreak -> currentTime - (longBreakDurationMinutes * 60 * 1000L)
+                PomodoroMode.Idle -> currentTime // Shouldn't happen
+            }
+
             // Determine next state based on current state
             pomodoroState = when (pomodoroState) {
                 PomodoroMode.Work -> {
@@ -3006,6 +3082,19 @@ fun PomodoroScreen(
                         )
                         onUpdateTask(updatedTask)
                         selectedTask = updatedTask
+
+                        // Log work session
+                        scope.launch(Dispatchers.IO) {
+                            val timeLogEntry = TimeLogEntry(
+                                taskId = task.id,
+                                type = TimeLogEntry.LogType.POMODORO_WORK,
+                                startTime = sessionStartTime,
+                                endTime = currentTime,
+                                durationMillis = workDurationMinutes * 60 * 1000L
+                            )
+                            // Save the time log entry to the database
+                            timeLogDao.insertTimeLog(TimeLogMapper.toEntity(timeLogEntry))
+                        }
 
                         // Show completion popup after work session
                         showCompletionPopup = true
@@ -3021,11 +3110,41 @@ fun PomodoroScreen(
                     }
                 }
                 PomodoroMode.ShortBreak -> {
+                    // Log short break session if a task is selected
+                    if (selectedTask != null) {
+                        scope.launch(Dispatchers.IO) {
+                            val timeLogEntry = TimeLogEntry(
+                                taskId = selectedTask!!.id,
+                                type = TimeLogEntry.LogType.POMODORO_SHORT_BREAK,
+                                startTime = sessionStartTime,
+                                endTime = currentTime,
+                                durationMillis = shortBreakDurationMinutes * 60 * 1000L
+                            )
+                            // Save the time log entry to the database
+                            timeLogDao.insertTimeLog(TimeLogMapper.toEntity(timeLogEntry))
+                        }
+                    }
+                    
                     // After short break, go to next work session and increment cycle
                     cycleCount++
                     PomodoroMode.Work
                 }
                 PomodoroMode.LongBreak -> {
+                    // Log long break session if a task is selected
+                    if (selectedTask != null) {
+                        scope.launch(Dispatchers.IO) {
+                            val timeLogEntry = TimeLogEntry(
+                                taskId = selectedTask!!.id,
+                                type = TimeLogEntry.LogType.POMODORO_LONG_BREAK,
+                                startTime = sessionStartTime,
+                                endTime = currentTime,
+                                durationMillis = longBreakDurationMinutes * 60 * 1000L
+                            )
+                            // Save the time log entry to the database
+                            timeLogDao.insertTimeLog(TimeLogMapper.toEntity(timeLogEntry))
+                        }
+                    }
+                    
                     // After long break, reset to first work session of next set
                     cycleCount++
                     PomodoroMode.Work
@@ -3207,6 +3326,7 @@ fun PomodoroScreen(
                 },
                 onSkip = {
                     timerRunning = false
+                    val currentTime = System.currentTimeMillis()
 
                     // Determine next state based on current state
                     pomodoroState = when (pomodoroState) {
@@ -3222,6 +3342,20 @@ fun PomodoroScreen(
                                     )
                                     onUpdateTask(updatedTask)
                                     selectedTask = updatedTask
+
+                                    // Log partial work session
+                                    scope.launch(Dispatchers.IO) {
+                                        val sessionStartTime = currentTime - elapsedTime
+                                        val timeLogEntry = TimeLogEntry(
+                                            taskId = task.id,
+                                            type = TimeLogEntry.LogType.POMODORO_WORK,
+                                            startTime = sessionStartTime,
+                                            endTime = currentTime,
+                                            durationMillis = elapsedTime
+                                        )
+                                        // Save the time log entry to the database
+                                        timeLogDao.insertTimeLog(TimeLogMapper.toEntity(timeLogEntry))
+                                    }
                                 }
                             }
 
@@ -3235,11 +3369,51 @@ fun PomodoroScreen(
                             }
                         }
                         PomodoroMode.ShortBreak -> {
+                            // If skipping short break, log partial break time
+                            if (selectedTask != null) {
+                                val elapsedTime = (shortBreakDurationMinutes * 60 * 1000L) - timeLeftInMillis
+                                if (elapsedTime > 0) {
+                                    // Log partial short break session
+                                    scope.launch(Dispatchers.IO) {
+                                        val sessionStartTime = currentTime - elapsedTime
+                                        val timeLogEntry = TimeLogEntry(
+                                            taskId = selectedTask!!.id,
+                                            type = TimeLogEntry.LogType.POMODORO_SHORT_BREAK,
+                                            startTime = sessionStartTime,
+                                            endTime = currentTime,
+                                            durationMillis = elapsedTime
+                                        )
+                                        // Save the time log entry to the database
+                                        timeLogDao.insertTimeLog(TimeLogMapper.toEntity(timeLogEntry))
+                                    }
+                                }
+                            }
+
                             // After short break, go to next work session and increment cycle
                             cycleCount++
                             PomodoroMode.Work
                         }
                         PomodoroMode.LongBreak -> {
+                            // If skipping long break, log partial break time
+                            if (selectedTask != null) {
+                                val elapsedTime = (longBreakDurationMinutes * 60 * 1000L) - timeLeftInMillis
+                                if (elapsedTime > 0) {
+                                    // Log partial long break session
+                                    scope.launch(Dispatchers.IO) {
+                                        val sessionStartTime = currentTime - elapsedTime
+                                        val timeLogEntry = TimeLogEntry(
+                                            taskId = selectedTask!!.id,
+                                            type = TimeLogEntry.LogType.POMODORO_LONG_BREAK,
+                                            startTime = sessionStartTime,
+                                            endTime = currentTime,
+                                            durationMillis = elapsedTime
+                                        )
+                                        // Save the time log entry to the database
+                                        timeLogDao.insertTimeLog(TimeLogMapper.toEntity(timeLogEntry))
+                                    }
+                                }
+                            }
+
                             // After long break, reset to first work session of next set
                             cycleCount++
                             PomodoroMode.Work
@@ -4964,7 +5138,8 @@ fun MainScreenPreview() {
             isSameDay = { _, _ -> false },
             onAddTask = {},
             onDeleteTask = {},
-            onUpdateTask = {}
+            onUpdateTask = {},
+            timeLogDao = AppDatabase.getDatabase(LocalContext.current).timeLogDao()  // Fixed DAO access
         )
     }
 }
@@ -6249,3 +6424,362 @@ data class Tuple4<A, B, C, D>(
     val third: C,
     val fourth: D
 )
+
+// Add this TimeLogScreen composable function
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeLogScreen(
+    navController: NavHostController,
+    timeLogDao: TimeLogDao,
+    taskDao: TaskDao
+) {
+    val scope = rememberCoroutineScope()
+    val allTimeLogs = timeLogDao.getAllTimeLogs().collectAsState(initial = emptyList()).value
+    val allTasks = taskDao.getAllTasks().collectAsState(initial = emptyList()).value
+    
+    // Map task IDs to task names for display
+    val taskNameMap = remember(allTasks) {
+        allTasks.associate { it.id to it.name }
+    }
+    
+    // Convert entities to domain objects
+    val timeLogs = remember(allTimeLogs) {
+        TimeLogMapper.fromEntities(allTimeLogs)
+    }
+    
+    // Group logs by date for display
+    val logsByDate = remember(timeLogs) {
+        timeLogs.groupBy { log ->
+            // Convert timestamp to date string
+            val date = Date(log.startTime)
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date)
+        }.toSortedMap(compareByDescending { it }) // Sort by date descending
+    }
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Time Log",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { paddingValues ->
+        if (timeLogs.isEmpty()) {
+            // Show empty state
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Timer,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(80.dp)
+                        .padding(bottom = 16.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                )
+                Text(
+                    text = "No time logs yet",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Time logs will be recorded when you use task timers or pomodoro sessions",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        } else {
+            // Show time logs grouped by date
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp)
+            ) {
+                logsByDate.forEach { (date, logsForDate) ->
+                    // Date header
+                    item {
+                        Text(
+                            text = formatDateHeader(date),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp)
+                        )
+                    }
+                    
+                    // Logs for this date
+                    items(logsForDate) { log ->
+                        TaskLogItem(
+                            timeLog = log,
+                            taskName = taskNameMap[log.taskId] ?: "Unknown Task"
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TaskLogItem(
+    timeLog: TimeLogEntry,
+    taskName: String
+) {
+    val startTime = formatTimeWithDate(timeLog.startTime)
+    val endTime = formatTimeWithDate(timeLog.endTime)
+    val duration = formatDuration(timeLog.durationMillis)
+    
+    // Determine background color based on log type
+    val backgroundColor = when (timeLog.type) {
+        TimeLogEntry.LogType.TASK_TIMER -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+        TimeLogEntry.LogType.POMODORO_WORK -> Color(0xFF4CAF50).copy(alpha = 0.1f) // Green
+        TimeLogEntry.LogType.POMODORO_SHORT_BREAK -> Color(0xFF2196F3).copy(alpha = 0.1f) // Blue
+        TimeLogEntry.LogType.POMODORO_LONG_BREAK -> Color(0xFF673AB7).copy(alpha = 0.1f) // Purple
+    }
+    
+    // Determine icon based on log type
+    val icon = when (timeLog.type) {
+        TimeLogEntry.LogType.TASK_TIMER -> Icons.Default.Timer
+        TimeLogEntry.LogType.POMODORO_WORK -> Icons.Default.Work
+        TimeLogEntry.LogType.POMODORO_SHORT_BREAK -> Icons.Default.Coffee
+        TimeLogEntry.LogType.POMODORO_LONG_BREAK -> Icons.Default.BatteryChargingFull
+    }
+    
+    // Determine color accent based on log type
+    val accentColor = when (timeLog.type) {
+        TimeLogEntry.LogType.TASK_TIMER -> MaterialTheme.colorScheme.primary
+        TimeLogEntry.LogType.POMODORO_WORK -> Color(0xFF4CAF50) // Green
+        TimeLogEntry.LogType.POMODORO_SHORT_BREAK -> Color(0xFF2196F3) // Blue
+        TimeLogEntry.LogType.POMODORO_LONG_BREAK -> Color(0xFF673AB7) // Purple
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = backgroundColor
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(end = 16.dp)
+            )
+            
+            // Log details
+            Column(modifier = Modifier.weight(1f)) {
+                // Type and task name
+                Text(
+                    text = "${formatLogType(timeLog.type)} - $taskName",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = accentColor
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Time range
+                Text(
+                    text = "$startTime - $endTime",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Duration
+                Text(
+                    text = "Duration: $duration",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// Helper function to format log type for display
+private fun formatLogType(logType: TimeLogEntry.LogType): String {
+    return when (logType) {
+        TimeLogEntry.LogType.TASK_TIMER -> "Task Timer"
+        TimeLogEntry.LogType.POMODORO_WORK -> "Pomodoro Work"
+        TimeLogEntry.LogType.POMODORO_SHORT_BREAK -> "Short Break"
+        TimeLogEntry.LogType.POMODORO_LONG_BREAK -> "Long Break"
+    }
+}
+
+// Helper function to format date header
+private fun formatDateHeader(dateString: String): String {
+    try {
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(dateString)
+        return SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault()).format(date!!)
+    } catch (e: Exception) {
+        return dateString
+    }
+}
+
+// Helper function to format time with date
+private fun formatTimeWithDate(timeMillis: Long): String {
+    return SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(timeMillis))
+}
+
+// Helper function to format duration
+private fun formatDuration(durationMillis: Long): String {
+    val hours = TimeUnit.MILLISECONDS.toHours(durationMillis)
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(durationMillis) % 60
+    val seconds = TimeUnit.MILLISECONDS.toSeconds(durationMillis) % 60
+    
+    return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+// Add this composable for time log items in the MainScreen
+@Composable
+fun TaskTimeLogItem(
+    timeLog: TimeLogEntry,
+    taskName: String,
+    onClick: () -> Unit
+) {
+    val startTime = formatTimeOnly(timeLog.startTime)
+    val endTime = formatTimeOnly(timeLog.endTime)
+    val duration = formatDuration(timeLog.durationMillis)
+    
+    // Determine background color and icon based on log type
+    val (backgroundColor, icon, label) = when (timeLog.type) {
+        TimeLogEntry.LogType.TASK_TIMER -> Triple(
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+            Icons.Default.Timer,
+            "Task Timer"
+        )
+        TimeLogEntry.LogType.POMODORO_WORK -> Triple(
+            Color(0xFF4CAF50).copy(alpha = 0.1f),
+            Icons.Default.Work,
+            "Pomodoro Work"
+        )
+        TimeLogEntry.LogType.POMODORO_SHORT_BREAK -> Triple(
+            Color(0xFF2196F3).copy(alpha = 0.1f),
+            Icons.Default.Coffee,
+            "Short Break"
+        )
+        TimeLogEntry.LogType.POMODORO_LONG_BREAK -> Triple(
+            Color(0xFF673AB7).copy(alpha = 0.1f),
+            Icons.Default.BatteryChargingFull,
+            "Long Break"
+        )
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = backgroundColor
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(32.dp)
+                    .padding(end = 12.dp)
+            )
+            
+            // Content
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Task name
+                    Text(
+                        text = taskName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    // Duration
+                    Text(
+                        text = duration,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Log type
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    // Time range
+                    Text(
+                        text = "$startTime - $endTime",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Helper function to format time only (no date)
+private fun formatTimeOnly(timeMillis: Long): String {
+    return SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(timeMillis))
+}

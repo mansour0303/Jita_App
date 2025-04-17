@@ -14,9 +14,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TaskEntity::class, 
         NoteEntity::class, 
         FolderEntity::class,
-        ReminderEntity::class
+        ReminderEntity::class,
+        TimeLogEntryEntity::class
     ],
-    version = 13,  // Increment version number from 12 to 13
+    version = 14,  // Increment version number from 13 to 14
     exportSchema = false
 )
 @TypeConverters(Converters::class, StringListConverter::class, IntListConverter::class)
@@ -27,12 +28,33 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun folderDao(): FolderDao
     abstract fun reminderDao(): ReminderDao
+    abstract fun timeLogDao(): TimeLogDao
 
     companion object {
         // Singleton prevents multiple instances of database opening at the
         // same time.
         @Volatile
         private var INSTANCE: AppDatabase? = null
+
+        // Migration from 13 to 14 - Add time_logs table
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create time_logs table
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS time_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        taskId INTEGER NOT NULL,
+                        type TEXT NOT NULL,
+                        startTime INTEGER NOT NULL,
+                        endTime INTEGER NOT NULL,
+                        durationMillis INTEGER NOT NULL,
+                        FOREIGN KEY (taskId) REFERENCES tasks(id) ON DELETE CASCADE
+                    )
+                    """
+                )
+            }
+        }
 
         // Migration from 12 to 13 - Add completedSubtasks column to tasks table
         private val MIGRATION_12_13 = object : Migration(12, 13) {
@@ -50,8 +72,8 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
         
-        // Direct migration from version 2 to 13
-        private val MIGRATION_2_13 = object : Migration(2, 13) {
+        // Direct migration from version 2 to 14
+        private val MIGRATION_2_14 = object : Migration(2, 14) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 // Create a new tasks table with all the required columns
                 database.execSQL(
@@ -158,6 +180,21 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """
                 )
+                
+                // Create time_logs table
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS time_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        taskId INTEGER NOT NULL,
+                        type TEXT NOT NULL,
+                        startTime INTEGER NOT NULL,
+                        endTime INTEGER NOT NULL,
+                        durationMillis INTEGER NOT NULL,
+                        FOREIGN KEY (taskId) REFERENCES tasks(id) ON DELETE CASCADE
+                    )
+                    """
+                )
             }
         }
 
@@ -171,7 +208,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "app_database"
                 )
                 // Use the migrations
-                .addMigrations(MIGRATION_2_13, MIGRATION_12_13)
+                .addMigrations(MIGRATION_2_14, MIGRATION_13_14)
                 .fallbackToDestructiveMigration() // Add this to handle severe migration issues
                 .build()
                 INSTANCE = instance
