@@ -50,6 +50,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the [LICENSE_TYPE] - see the LICENSE file for details.
 
+## Support Developer
+
+### Donate with Tonkeeper
+
+You can support development by sending TON or other cryptocurrencies to this address:
+UQDDPZ03aVFWZNs1nDp7jGaM_9q__EmvIqYFY-yZ6Om8nGJz
+
 ## Contact
 
-*[Your contact information if you wish to include it]* 
+*NickQuinn0404@gmail.com* 
