@@ -137,7 +137,7 @@ fun ContactDeveloperScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     val clipboardManager = LocalClipboardManager.current
-                    val developerEmail = "developer@jita-app.com"
+                    val developerEmail = "NickQuinn0404@gmail.com"
                     
                     // Developer email with copy button
                     OutlinedCard(
