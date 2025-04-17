@@ -15,13 +15,10 @@ JITA is a comprehensive productivity and task management application for Android
 - **Backup & Restore**: Easily backup and restore your data
 
 ## Screenshots
-
-   <p align="center">
-     <img src="Jita_App/app/src/main/res/drawable/Screenshots/home_screen.jpg/home_screen.jpg" width="250" alt="Home Screen">
-     <img src="Jita_App/app/src/main/res/drawable/Screenshots/noteeditor.jpg" width="250" alt="Note Editor">
-     <img src="Jita_App/app/src/main/res/drawable/Screenshots/pomodoro.jpg" width="250" alt="Pomodoro Timer">
-     <img src="Jita_App/app/src/main/res/drawable/Screenshots/notes.jpg" width="250" alt="Notes Page">
-   </p>
+![noteeditor](https://github.com/user-attachments/assets/24a739f6-534a-4b4e-b81b-b3b0ab2db17b)
+![notes](https://github.com/user-attachments/assets/6feecbe8-7c63-4840-b1ca-a7d950ddd8e9)
+![pomodoro](https://github.com/user-attachments/assets/84cf67cf-e601-4df1-accf-ffe7d5c4b8bb)
+![home_screen](https://github.com/user-attachments/assets/87c85bbd-b9d2-4201-a621-dd4bff39e212)
 
 ## Getting Started
 
