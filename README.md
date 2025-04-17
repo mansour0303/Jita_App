@@ -48,7 +48,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the [LICENSE_TYPE] - see the LICENSE file for details.
+This project is licensed under the GNU General Public License (GPL) v3 - see the LICENSE file for details.
 
 ## Support Developer
 
