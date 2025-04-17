@@ -16,7 +16,12 @@ JITA is a comprehensive productivity and task management application for Android
 
 ## Screenshots
 
-*[Add screenshots of your app here]*
+   <p align="center">
+     <img src="Jita_App/app/src/main/res/drawable/Screenshots/home_screen.jpg/home_screen.jpg" width="250" alt="Home Screen">
+     <img src="Jita_App/app/src/main/res/drawable/Screenshots/noteeditor.jpg" width="250" alt="Note Editor">
+     <img src="Jita_App/app/src/main/res/drawable/Screenshots/pomodoro.jpg" width="250" alt="Pomodoro Timer">
+     <img src="Jita_App/app/src/main/res/drawable/Screenshots/notes.jpg" width="250" alt="Notes Page">
+   </p>
 
 ## Getting Started
 
