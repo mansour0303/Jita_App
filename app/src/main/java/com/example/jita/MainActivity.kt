@@ -2785,6 +2785,9 @@ fun MainScreen(
 
                             Log.d("EditTask", "Saving task with imagePaths: ${newTaskImagePaths.size}, filePaths: ${newTaskFilePaths.size}")
                             
+                            // Check if date has changed to update time logs
+                            val dateChanged = !isSameDay(taskToEdit!!.dueDate, newTaskDate)
+                            
                             // Create updated Task object with the same ID
                             val updatedTask = Task(
                                 id = taskToEdit!!.id, // Keep the same ID
@@ -2803,8 +2806,32 @@ fun MainScreen(
                                 completedSubtasks = taskToEdit!!.completedSubtasks // Preserve the completed subtasks
                             )
 
-                            // Use updateTask instead of delete + add to preserve time log relationships
+                            // Use updateTask to save the changes
                             onUpdateTask(updatedTask)
+                            
+                            // If date has changed, update all time logs to the new date
+                            if (dateChanged) {
+                                scope.launch(Dispatchers.IO) {
+                                    val logCount = updateTimeLogsForTaskDateChange(
+                                        timeLogDao,
+                                        taskToEdit!!.id,
+                                        taskToEdit!!.dueDate,
+                                        newTaskDate
+                                    )
+                                    
+                                    // Show a toast on the main thread if logs were moved
+                                    if (logCount > 0) {
+                                        withContext(Dispatchers.Main) {
+                                            val dateFormatter = SimpleDateFormat("MMM d", Locale.getDefault())
+                                            Toast.makeText(
+                                                context,
+                                                "$logCount time logs moved to ${dateFormatter.format(newTaskDate.time)}",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            }
 
                             showEditTaskDialog = false
                             taskToEdit = null
@@ -6894,4 +6921,34 @@ fun TaskTimeLogItem(
 // Helper function to format time only (no date)
 private fun formatTimeOnly(timeMillis: Long): String {
     return SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(timeMillis))
+}
+
+// Helper function to update time log dates when a task's date changes
+// Returns the number of logs that were updated
+private suspend fun updateTimeLogsForTaskDateChange(
+    timeLogDao: TimeLogDao,
+    taskId: Int,
+    oldDate: Calendar,
+    newDate: Calendar
+): Int {
+    // Skip if dates are the same
+    if (isSameDay(oldDate, newDate)) return 0
+    
+    // Get all time logs for this task
+    val timeLogs = timeLogDao.getTimeLogsForTaskAsList(taskId)
+    if (timeLogs.isEmpty()) return 0
+    
+    // Calculate the date difference in milliseconds
+    val dateDifferenceMillis = newDate.timeInMillis - oldDate.timeInMillis
+    
+    // Update each time log by shifting the date component while preserving the time of day
+    timeLogs.forEach { timeLog ->
+        val updatedTimeLog = timeLog.copy(
+            startTime = timeLog.startTime + dateDifferenceMillis,
+            endTime = timeLog.endTime + dateDifferenceMillis
+        )
+        timeLogDao.updateTimeLog(updatedTimeLog)
+    }
+    
+    return timeLogs.size
 }

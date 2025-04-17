@@ -36,4 +36,10 @@ interface TimeLogDao {
 
     @Query("DELETE FROM time_logs")
     suspend fun deleteAllTimeLogs()
+
+    /**
+     * Get all time logs for a task as a non-flow list for processing
+     */
+    @Query("SELECT * FROM time_logs WHERE taskId = :taskId")
+    suspend fun getTimeLogsForTaskAsList(taskId: Int): List<TimeLogEntryEntity>
 } 
