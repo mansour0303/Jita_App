@@ -4111,7 +4111,7 @@ fun TaskCard(
             else
                 task.priority.color.copy(alpha = 0.1f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
@@ -6675,7 +6675,7 @@ private fun formatDuration(durationMillis: Long): String {
 fun TaskTimeLogItem(
     timeLog: TimeLogEntry,
     taskName: String,
-    onClick: () -> Unit
+    onClick: () -> Unit = {}  // Make onClick optional with empty default
 ) {
     val startTime = formatTimeOnly(timeLog.startTime)
     val endTime = formatTimeOnly(timeLog.endTime)
@@ -6708,8 +6708,7 @@ fun TaskTimeLogItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clickable(onClick = onClick),
+            .padding(vertical = 4.dp),
         colors = CardDefaults.cardColors(
             containerColor = backgroundColor,
             contentColor = MaterialTheme.colorScheme.onSurface
