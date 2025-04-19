@@ -15,8 +15,10 @@ JITA is a comprehensive productivity and task management application for Android
 - **Backup & Restore**: Easily backup and restore your data
 
 ## Screenshots
-
-*[Add screenshots of your app here]*
+![noteeditor](https://github.com/user-attachments/assets/24a739f6-534a-4b4e-b81b-b3b0ab2db17b)
+![notes](https://github.com/user-attachments/assets/6feecbe8-7c63-4840-b1ca-a7d950ddd8e9)
+![pomodoro](https://github.com/user-attachments/assets/84cf67cf-e601-4df1-accf-ffe7d5c4b8bb)
+![home_screen](https://github.com/user-attachments/assets/87c85bbd-b9d2-4201-a621-dd4bff39e212)
 
 ## Getting Started
 
@@ -46,8 +48,15 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the [LICENSE_TYPE] - see the LICENSE file for details.
+This project is licensed under the GNU General Public License (GPL) v3 - see the LICENSE file for details.
+
+## Support Developer
+
+### Donate with Tonkeeper
+
+You can support development by sending TON or other cryptocurrencies to this address:
+UQDDPZ03aVFWZNs1nDp7jGaM_9q__EmvIqYFY-yZ6Om8nGJz
 
 ## Contact
 
-*[Your contact information if you wish to include it]* 
+*NickQuinn0404@gmail.com* 
